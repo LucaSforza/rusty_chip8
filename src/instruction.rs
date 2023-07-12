@@ -1,9 +1,8 @@
 use std::fmt;
 
 use crate::{display::Display, display::Sprite, memory::Memory, registers::Registers};
+use minifb::Key;
 use rand::Rng;
-
-use termion::event::Key;
 
 #[derive(Clone)]
 pub struct Istruction {
@@ -47,44 +46,44 @@ impl fmt::Display for Istruction {
 
 pub fn convert_key_to_value(key: Key) -> Option<u8> {
     match key {
-        Key::Char('x') => Some(0x0),
-        Key::Char('1') => Some(0x1),
-        Key::Char('2') => Some(0x2),
-        Key::Char('3') => Some(0x3),
-        Key::Char('q') => Some(0x4),
-        Key::Char('w') => Some(0x5),
-        Key::Char('e') => Some(0x6),
-        Key::Char('a') => Some(0x7),
-        Key::Char('s') => Some(0x8),
-        Key::Char('d') => Some(0x9),
-        Key::Char('z') => Some(0xA),
-        Key::Char('c') => Some(0xB),
-        Key::Char('4') => Some(0xC),
-        Key::Char('r') => Some(0xD),
-        Key::Char('f') => Some(0xE),
-        Key::Char('v') => Some(0xF),
+        Key::X => Some(0x0),
+        Key::Key1 => Some(0x1),
+        Key::Key2 => Some(0x2),
+        Key::Key3 => Some(0x3),
+        Key::Q => Some(0x4),
+        Key::W => Some(0x5),
+        Key::E => Some(0x6),
+        Key::A => Some(0x7),
+        Key::S => Some(0x8),
+        Key::D => Some(0x9),
+        Key::Z => Some(0xA),
+        Key::C => Some(0xB),
+        Key::Key4 => Some(0xC),
+        Key::R => Some(0xD),
+        Key::F => Some(0xE),
+        Key::V => Some(0xF),
         _ => None,
     }
 }
 
 pub fn convert_num_to_key(key: u8) -> Key {
     match key {
-        0x0 => Key::Char('x'),
-        0x1 => Key::Char('1'),
-        0x2 => Key::Char('2'),
-        0x3 => Key::Char('3'),
-        0x4 => Key::Char('q'),
-        0x5 => Key::Char('w'),
-        0x6 => Key::Char('e'),
-        0x7 => Key::Char('a'),
-        0x8 => Key::Char('s'),
-        0x9 => Key::Char('d'),
-        0xA => Key::Char('z'),
-        0xB => Key::Char('c'),
-        0xC => Key::Char('4'),
-        0xD => Key::Char('r'),
-        0xE => Key::Char('f'),
-        0xF => Key::Char('v'),
+        0x0 => Key::X,
+        0x1 => Key::Key1,
+        0x2 => Key::Key2,
+        0x3 => Key::Key3,
+        0x4 => Key::Q,
+        0x5 => Key::W,
+        0x6 => Key::E,
+        0x7 => Key::A,
+        0x8 => Key::S,
+        0x9 => Key::D,
+        0xA => Key::Z,
+        0xB => Key::C,
+        0xC => Key::Key4,
+        0xD => Key::R,
+        0xE => Key::F,
+        0xF => Key::V,
         _ => panic!("key inesistent"),
     }
 }

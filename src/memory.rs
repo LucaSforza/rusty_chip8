@@ -34,16 +34,6 @@ impl Memory {
         mem.write_slice(0x50, &FONT);
         mem
     }
-    pub fn read_8bit(&self, address: u16) -> Result<u8, &str> {
-        if address >= CAPACITY as u16 {
-            return Err("overflow ,the address is too big for this memory");
-        }
-        let ptr = self.ptr.as_ptr();
-        unsafe {
-            let ptr = ptr.add(address as usize);
-            Ok(ptr.read())
-        }
-    }
     pub fn read_16bit(&self, address: u16) -> Result<u16, &str> {
         if address >= CAPACITY as u16 {
             return Err("overflow ,the address is too big for this memory");
@@ -77,16 +67,6 @@ impl Memory {
             ptr.write(*val);
             ptr = ptr.add(1);
         })
-    }
-    pub fn write_8bit(&mut self, address: u16, value: u8) {
-        if address >= CAPACITY as u16 {
-            panic!("overflow ,the address is too big for this memory")
-        }
-        let ptr = self.ptr.as_ptr();
-        unsafe {
-            let ptr = ptr.add(address as usize);
-            ptr.write(value)
-        }
     }
 }
 impl Drop for Memory {

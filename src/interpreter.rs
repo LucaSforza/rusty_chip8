@@ -2,12 +2,12 @@
 use std::fs::File;
 use std::io::Read;
 
+use minifb::Key;
+
 use crate::display::{Display, Sprite};
 use crate::instruction::*;
 use crate::memory::Memory;
 use crate::registers::Registers;
-
-use termion::event::Key;
 
 pub struct Interpreter {
     regs: Registers,
@@ -49,9 +49,12 @@ impl Interpreter {
             self.interrupt = false
         }
     }
-    pub fn add_key(&mut self, key: Key) {
-        if !self.keys_pressed.contains(&key) {
-            self.keys_pressed.push(key);
+    pub fn add_key(&mut self, key: &Key) {
+        if convert_key_to_value(*key).is_none() {
+            return;
+        }
+        if !self.keys_pressed.contains(key) {
+            self.keys_pressed.push(*key);
         }
     }
     pub fn set_debug(&mut self, flag: bool) {
@@ -61,14 +64,15 @@ impl Interpreter {
         self.to_draw
     }
     pub fn release_key(&mut self, key: Key) {
-        let mut new_keys: Vec<Key> = Vec::with_capacity(self.keys_pressed.capacity());
-        for k in self.keys_pressed.iter() {
-            let k = *k;
-            if k != key {
-                new_keys.push(k)
+        if convert_key_to_value(key).is_none() {
+            return;
+        }
+        for (i, k) in self.keys_pressed.iter().enumerate() {
+            if *k == key {
+                self.keys_pressed.remove(i);
+                return;
             }
         }
-        self.keys_pressed = new_keys
     }
     pub fn get_last_key(&self) -> Option<&Key> {
         self.keys_pressed.last()
