@@ -1,10 +1,9 @@
-#![allow(dead_code)]
 use std::fs::File;
 use std::io::Read;
 
 use minifb::Key;
 
-use crate::display::{Display, Sprite};
+use crate::display::Display;
 use crate::instruction::*;
 use crate::memory::Memory;
 use crate::registers::Registers;
@@ -14,12 +13,16 @@ pub struct Interpreter {
     mem: Memory,
     disp: Display,
     interrupt: bool,
-    debug: bool,
     to_draw: bool,
     keys_pressed: Vec<Key>,
     reg: u8,
 }
 impl Interpreter {
+    pub fn update_timers(&mut self) {
+        self.regs.decrement_delay();
+        self.regs.decrement_sound();
+    }
+
     pub fn write_rom_on_mem(&mut self, file: File) {
         let mut data = Vec::new();
         for byte in file.bytes() {
@@ -31,14 +34,8 @@ impl Interpreter {
     pub fn draw(&mut self, buf: &mut [u32]) {
         self.disp.draw(buf);
     }
-    pub fn add_sprite(&mut self, sprite: Sprite) {
-        println!("{}", self.disp.add_sprite(sprite));
-    }
-    pub fn sound_is_playinf(&self) -> bool {
+    pub fn sound_is_playing(&self) -> bool {
         self.regs.get_sound() != 0
-    }
-    pub fn delay_is_on(&self) -> bool {
-        self.regs.get_delay() != 0
     }
     pub fn interrupt(&self) -> bool {
         self.interrupt
@@ -56,9 +53,6 @@ impl Interpreter {
         if !self.keys_pressed.contains(key) {
             self.keys_pressed.push(*key);
         }
-    }
-    pub fn set_debug(&mut self, flag: bool) {
-        self.debug = flag
     }
     pub fn to_draw(&self) -> bool {
         self.to_draw
@@ -81,10 +75,6 @@ impl Interpreter {
         //Fect istruction
         let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()).unwrap());
         self.regs.increment_pc();
-
-        if self.debug {
-            println!("{}", istro)
-        }
 
         //decode and execute
         match istro.get_op_code() {
@@ -145,13 +135,6 @@ impl Interpreter {
             },
             _ => panic!("op code non-existent"),
         }
-
-        self.regs.decrement_delay();
-        self.regs.decrement_sound();
-
-        if self.debug {
-            println!("{}", self.regs)
-        }
     }
 }
 impl Default for Interpreter {
@@ -161,9 +144,8 @@ impl Default for Interpreter {
             mem: Default::default(),
             disp: Default::default(),
             interrupt: Default::default(),
-            debug: Default::default(),
             to_draw: Default::default(),
-            keys_pressed: Default::default(),
+            keys_pressed: Vec::with_capacity(16), // 16 of capacity for 16 keys
             reg: Default::default(),
         }
     }

@@ -9,3 +9,4 @@ edition = "2021"
 clap = { version = "4.3.8", features = ["derive"] }
 minifb = "0.24.0"
 rand = "0.8.5"
+rodio = "0.17.1"

@@ -44,8 +44,9 @@ impl Display {
         if buf.len() != REAL_HEIGHT * REAL_WIDTH {
             panic!("the buffer is incorrect")
         }
-        self.buf.iter().enumerate().for_each(|(n_row, row)| {
-            row.iter().enumerate().for_each(|(n_col, value)| {
+
+        for (n_row, row) in self.buf.iter().enumerate() {
+            for (n_col, value) in row.iter().enumerate() {
                 let start_pixel = (n_row * REAL_WIDTH * 10) + n_col * 10;
                 let pixel_color = buf[start_pixel];
                 let last_value = pixel_color != 0;
@@ -57,8 +58,8 @@ impl Display {
                         }
                     }
                 }
-            })
-        });
+            }
+        }
     }
 }
 impl Default for Display {
