@@ -1,30 +1,32 @@
-mod args;
 mod display;
 mod instruction;
 mod interpreter;
 mod memory;
 mod registers;
 
-use crate::args::ChipArgs;
+use std::{env, fs::File, path::Path};
+
 use crate::interpreter::Interpreter;
 
-use clap::Parser;
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use rodio::source::{SineWave, Source};
 use rodio::{OutputStream, Sink};
-
-use std::fs::File;
-use std::path::Path;
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 320;
 
 fn main() {
-    let args = ChipArgs::parse();
-    let path = Path::new(&args.path);
+    let mut args = env::args();
+    let program = args.next().unwrap();
+    let path = args.next().unwrap_or_else(|| {
+        eprintln!("[ERROR] no path provided");
+        eprintln!("[ERROR] Usage: {program} <path>");
+        std::process::exit(1);
+    });
+    let path = Path::new(&path);
     if !path.exists() {
-        println!("the path don't exists");
-        return;
+        eprintln!("[ERROR] file '{}' not found", path.to_str().unwrap());
+        std::process::exit(2);
     }
 
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
