@@ -8,9 +8,7 @@ pub struct Display {
 }
 impl Display {
     pub fn clear_display(&mut self) {
-        self.buf
-            .iter_mut()
-            .for_each(|row| row.iter_mut().for_each(|val| *val = false))
+        self.buf.iter_mut().flatten().for_each(|val| *val = false)
     }
 
     pub fn add_sprite(&mut self, sprite: Sprite) -> bool {

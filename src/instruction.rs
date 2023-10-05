@@ -88,6 +88,7 @@ pub fn convert_num_to_key(key: u8) -> Key {
     }
 }
 
+//TODO: move these functions inside 'impl Interpreter'
 pub fn jump(istro: Istruction, regs: &mut Registers) {
     regs.set_pc(istro.get_addr())
 }

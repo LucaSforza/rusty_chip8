@@ -72,7 +72,7 @@ impl Interpreter {
         self.keys_pressed.last()
     }
     pub fn next(&mut self) {
-        //Fect istruction
+        // Fetch istruction
         let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()).unwrap());
         self.regs.increment_pc();
 

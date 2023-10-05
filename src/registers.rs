@@ -4,8 +4,7 @@ pub struct Registers {
     v: [u8; 16],
     i: u16,
     pc: u16,
-    sp: u8,
-    stack: [u16; 16],
+    stack: Vec<u16>,
     sound_timer: u8,
     delay_timer: u8,
 }
@@ -35,18 +34,11 @@ impl Registers {
         self.pc += 2
     }
     pub fn stack_push(&mut self) {
-        if self.sp == 16 {
-            panic!("stack overflow ,the sp can't be >= 16");
-        }
-        self.stack[self.sp as usize] = self.pc;
-        self.sp += 1;
+        self.stack.push(self.pc)
     }
     pub fn stack_pop(&mut self) {
-        match self.sp.checked_sub(1) {
-            Some(new_sp) => {
-                self.pc = self.stack[new_sp as usize];
-                self.sp = new_sp;
-            }
+        match self.stack.pop() {
+            Some(pc) => self.pc = pc,
             None => panic!("stack overflow ,the sp can't be < 0"),
         }
     }
@@ -79,8 +71,7 @@ impl Default for Registers {
             v: Default::default(),
             i: Default::default(),
             pc: 0x200,
-            sp: Default::default(),
-            stack: Default::default(),
+            stack: Vec::with_capacity(16),
             sound_timer: Default::default(),
             delay_timer: Default::default(),
         }
