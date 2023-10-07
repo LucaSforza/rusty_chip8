@@ -24,7 +24,7 @@ Compile the emulator
   cargo build
 ```
 
-Run the emulato
+Run the emulator
 
 ```bash
   cargo run <path to a bytecode file>
