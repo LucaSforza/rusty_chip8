@@ -32,7 +32,7 @@ impl Istruction {
         }
     }
 }
-impl fmt::Display for Istruction {
+impl fmt::Debug for Istruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x{:X}", self.val)
     }
