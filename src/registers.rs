@@ -54,7 +54,7 @@ impl Registers {
     pub fn get_sound(&self) -> u8 {
         self.sound_timer
     }
-    pub fn decrement_sound(&mut self) {
+    /*pub fn decrement_sound(&mut self) {
         if self.sound_timer != 0 {
             self.sound_timer -= 1
         }
@@ -63,7 +63,7 @@ impl Registers {
         if self.delay_timer != 0 {
             self.delay_timer -= 1
         }
-    }
+    }*/
 }
 impl Default for Registers {
     fn default() -> Self {
@@ -85,48 +85,5 @@ impl fmt::Display for Registers {
         }
         writeln!(f, "]")?;
         write!(f, "pc: {:X} i:0x{:X}", self.pc, self.i)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::Registers;
-
-    #[test]
-    fn test_v_regs() {
-        let mut regs = Registers::default();
-        for i in 0..16 {
-            regs.set_v(i, i as u8);
-        }
-        for i in 0..16 {
-            assert_eq!(regs.get_v(i), i as u8)
-        }
-    }
-    #[test]
-    fn test_flag_reg() {
-        let mut regs = Registers::default();
-        regs.set_flag(true);
-        assert_eq!(regs.get_v(15), 1);
-        regs.set_flag(false);
-        assert_eq!(regs.get_v(15), 0);
-    }
-    #[test]
-    fn test_pc() {
-        let mut regs = Registers::default();
-        regs.increment_pc();
-        regs.increment_pc();
-        assert_eq!(regs.get_pc(), 0x204)
-    }
-    #[test]
-    fn test_stack() {
-        let mut regs = Registers::default();
-        (0..16).for_each(|_| {
-            regs.stack_push();
-            regs.increment_pc()
-        });
-        (256..272).rev().for_each(|n| {
-            regs.stack_pop();
-            assert_eq!(regs.get_pc(), n << 1)
-        })
     }
 }

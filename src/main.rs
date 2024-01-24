@@ -1,5 +1,4 @@
 mod display;
-mod instruction;
 mod interpreter;
 mod memory;
 mod registers;
@@ -82,11 +81,9 @@ fn main() {
             sink.pause()
         }
 
-        interpreter.update_timers();
-
         if interpreter.to_draw() {
-            window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
             interpreter.draw(&mut buffer);
+            window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
         }
     }
 }
