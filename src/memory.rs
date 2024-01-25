@@ -32,7 +32,7 @@ impl Memory {
     }
     pub fn read_16bit(&self, address: u16) -> u16 {
         let address = address as usize;
-        ((self.buf[address] as u16) << 8) | self.buf[address + 1] as u16
+        u16::from_be_bytes([self.buf[address], self.buf[address + 1]])
     }
     pub fn read_slice(&self, address: u16, buff: &mut [u8]) {
         let start = address as usize;
