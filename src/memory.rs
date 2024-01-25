@@ -1,6 +1,3 @@
-use std::alloc::{alloc, dealloc, Layout};
-use std::ptr::NonNull;
-
 const CAPACITY: usize = 4096; // bytes
 
 const FONT: [u8; 80] = [
@@ -27,9 +24,11 @@ pub struct Memory {
 }
 impl Memory {
     pub fn new() -> Memory {
-        Memory {
+        let mut mem = Memory {
             buf: vec![0;CAPACITY]
-        }
+        };
+        mem.write_slice(0x50, &FONT);
+        mem
     }
     pub fn read_16bit(&self, address: u16) -> u16 {
         let address = address as usize;
