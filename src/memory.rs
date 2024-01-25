@@ -23,57 +23,27 @@ const FONT: [u8; 80] = [
 ];
 
 pub struct Memory {
-    ptr: NonNull<u8>,
+    buf: Vec<u8>,
 }
 impl Memory {
     pub fn new() -> Memory {
-        let layout = Layout::array::<u8>(CAPACITY).expect("can't allocate");
-        let ptr = unsafe { alloc(layout) };
-        let ptr = NonNull::new(ptr).expect("the ptr is null");
-        let mut mem = Memory { ptr: ptr };
-        mem.write_slice(0x50, &FONT);
-        mem
+        Memory {
+            buf: vec![0;CAPACITY]
+        }
     }
-    pub fn read_16bit(&self, address: u16) -> Result<u16, &str> {
-        if address >= CAPACITY as u16 {
-            return Err("overflow ,the address is too big for this memory");
-        }
-        let ptr = self.ptr.as_ptr();
-        unsafe {
-            let ptr = ptr.add(address as usize) as *mut u16;
-            let val = ptr.read();
-            if cfg!(target_endian = "little") {
-                return Ok(val.to_be());
-            }
-            Ok(val)
-        }
+    pub fn read_16bit(&self, address: u16) -> u16 {
+        let address = address as usize;
+        ((self.buf[address] as u16) << 8) | self.buf[address + 1] as u16
     }
     pub fn read_slice(&self, address: u16, buff: &mut [u8]) {
-        if address as usize + buff.len() >= CAPACITY {
-            panic!("overflow ,the slice is too big for this memory starting on this address")
-        }
-        let mut ptr = unsafe { self.ptr.as_ptr().add(address as usize) };
-        buff.iter_mut().for_each(|val| unsafe {
-            *val = ptr.read();
-            ptr = ptr.add(1)
-        })
+        let start = address as usize;
+        let end = start + buff.len();
+        buff.copy_from_slice(&self.buf[start..end]);
     }
     pub fn write_slice(&mut self, address: u16, slice: &[u8]) {
-        if address as usize + slice.len() >= CAPACITY {
-            panic!("overflow ,the slice is too big for this memory starting on this address")
-        }
-        let mut ptr = unsafe { self.ptr.as_ptr().add(address as usize) };
-        slice.iter().for_each(|val| unsafe {
-            ptr.write(*val);
-            ptr = ptr.add(1);
-        })
-    }
-}
-impl Drop for Memory {
-    fn drop(&mut self) {
-        let layout = Layout::array::<u8>(CAPACITY).expect("can't dellocate");
-        let ptr = self.ptr.as_ptr();
-        unsafe { dealloc(ptr, layout) };
+        let address = address as usize;
+        let len = slice.len();
+        self.buf[address..address+len].copy_from_slice(slice);
     }
 }
 impl Default for Memory {

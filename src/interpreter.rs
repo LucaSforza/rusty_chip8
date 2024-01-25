@@ -143,7 +143,7 @@ impl Interpreter {
     }
     pub fn next(&mut self) {
         // Fetch instruction
-        let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()).unwrap());
+        let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
         self.regs.increment_pc();
 
         // Decode and execute
