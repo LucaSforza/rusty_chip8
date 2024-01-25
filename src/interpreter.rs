@@ -3,7 +3,8 @@ use std::fs::File;
 use std::io::Read;
 
 use minifb::Key;
-use rand::Rng;
+use rand::rngs::ThreadRng;
+use rand::{thread_rng, Rng};
 
 use crate::display::{Display, Sprite};
 use crate::memory::Memory;
@@ -90,6 +91,7 @@ pub struct Interpreter {
     to_draw: bool,
     keys_pressed: Vec<Key>,
     reg: u8,
+    r_thread: ThreadRng,
 }
 impl Interpreter {
 
@@ -351,8 +353,7 @@ impl Interpreter {
     }
 
     fn rand(&mut self, istro: Istruction) {
-        let mut rng = rand::thread_rng();
-        let random_byte = rng.gen_range(0..256) as u8;
+        let random_byte = self.r_thread.gen_range(0..256) as u8;
         let bit_mask = istro.byte;
         let x = istro.reg;
         self.regs.set_v(x as usize, random_byte & bit_mask)
@@ -451,6 +452,7 @@ impl Default for Interpreter {
             to_draw: Default::default(),
             keys_pressed: Vec::with_capacity(16), // 16 of capacity for 16 keys
             reg: Default::default(),
+            r_thread: thread_rng(),
         }
     }
 }
