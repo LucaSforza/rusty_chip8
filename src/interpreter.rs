@@ -103,21 +103,26 @@ impl Interpreter {
         }
         self.mem.write_slice(0x200, data.as_slice())
     }
+
     pub fn draw(&mut self, buf: &mut [u32]) {
         self.disp.draw(buf);
     }
+
     pub fn sound_is_playing(&self) -> bool {
         self.regs.get_sound() != 0
     }
+
     pub fn interrupt(&self) -> bool {
         self.interrupt
     }
+
     pub fn set_key(&mut self, key: Key) {
         if let Some(key) = convert_key_to_value(key) {
             self.regs.set_v(self.reg as usize, key);
             self.interrupt = false
         }
     }
+
     pub fn add_key(&mut self, key: &Key) {
         if convert_key_to_value(*key).is_none() {
             return;
@@ -126,9 +131,11 @@ impl Interpreter {
             self.keys_pressed.push(*key);
         }
     }
+
     pub fn to_draw(&self) -> bool {
         self.to_draw
     }
+
     pub fn release_key(&mut self, key: Key) {
         if convert_key_to_value(key).is_none() {
             return;
@@ -143,7 +150,9 @@ impl Interpreter {
     pub fn get_last_key(&self) -> Option<&Key> {
         self.keys_pressed.last()
     }
+
     pub fn next(&mut self) {
+        //TODO: spostare questo nel metodo 'next' del tratto Iterator
         // Fetch instruction
         let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
         self.regs.increment_pc();
@@ -218,12 +227,14 @@ impl Interpreter {
             self.regs.increment_pc()
         }
     }
+
     fn skip_if_not_equal_reg_byte(&mut self, istro: Istruction) {
         let x_value = self.regs.get_v(istro.reg as usize);
         if x_value != istro.byte {
             self.regs.increment_pc()
         }
     }
+
     fn skip_if_equal_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -236,11 +247,13 @@ impl Interpreter {
         let x = istro.reg as usize;
         self.regs.set_v(x, istro.byte)
     }
+
     fn add_reg_byte(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let new_val = istro.byte as u16 + self.regs.get_v(x) as u16;
         self.regs.set_v(x, new_val as u8)
     }
+
     fn move_regs(&mut self, istro: Istruction) {
         let x = istro.reg;
         let y = istro.nibbles;
@@ -257,6 +270,7 @@ impl Interpreter {
         self.regs.set_v(x, new_val);
         self.regs.set_flag(false)
     }
+
     fn and_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -266,6 +280,7 @@ impl Interpreter {
         self.regs.set_v(x, new_val);
         self.regs.set_flag(false)
     }
+
     fn xor_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -275,6 +290,7 @@ impl Interpreter {
         self.regs.set_v(x, new_val);
         self.regs.set_flag(false)
     }
+
     fn add_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -442,6 +458,7 @@ impl Iterator for Interpreter {
         todo!()
     }
 }
+
 impl Default for Interpreter {
     fn default() -> Self {
         Self {
