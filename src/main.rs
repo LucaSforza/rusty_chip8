@@ -1,4 +1,5 @@
 mod display;
+mod interrupt;
 mod interpreter;
 mod memory;
 mod registers;
@@ -7,6 +8,7 @@ use std::{env, fs::File, path::Path};
 
 use crate::interpreter::Interpreter;
 
+use interrupt::{Interrupt, KeyInterrupt};
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use rodio::source::{SineWave, Source};
 use rodio::{OutputStream, Sink};
@@ -57,23 +59,26 @@ fn main() {
 
     window.limit_update_rate(Some(std::time::Duration::from_micros(1300)));
 
+    let mut pending_interrupts = Vec::<Box<dyn Interrupt>>::new();
+
     //While loop for when the window is open and the escape key is not pressed
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        window
-            .get_keys_released()
-            .iter()
-            .for_each(|k| interpreter.release_key(*k));
 
-        window
-            .get_keys_pressed(KeyRepeat::No)
-            .iter()
-            .for_each(|k| interpreter.add_key(k));
+        pending_interrupts.extend(
+            window
+                .get_keys_pressed(KeyRepeat::No)
+                .iter()
+                .map(|k| KeyInterrupt::new(*k, false))
+        );
 
-        if !interpreter.interrupt() {
-            interpreter.next();
-        } else if let Some(key) = interpreter.get_last_key() {
-            interpreter.set_key(*key)
-        }
+        pending_interrupts.extend(
+            window
+                    .get_keys_released()
+                    .iter()
+                    .map(|k| KeyInterrupt::new(*k,true))
+            );
+
+        interpreter.next_istr(&pending_interrupts);
 
         if interpreter.sound_is_playing() {
             sink.play()

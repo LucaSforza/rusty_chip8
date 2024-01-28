@@ -7,6 +7,7 @@ use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng};
 
 use crate::display::{Display, Sprite};
+use crate::interrupt::Interrupt;
 use crate::memory::Memory;
 use crate::registers::Registers;
 
@@ -87,7 +88,6 @@ pub struct Interpreter {
     regs: Registers,
     mem: Memory,
     disp: Display,
-    interrupt: bool,
     to_draw: bool,
     keys_pressed: Vec<Key>,
     reg: u8,
@@ -112,23 +112,18 @@ impl Interpreter {
         self.regs.get_sound() != 0
     }
 
-    pub fn interrupt(&self) -> bool {
-        self.interrupt
-    }
-
     pub fn set_key(&mut self, key: Key) {
         if let Some(key) = convert_key_to_value(key) {
             self.regs.set_v(self.reg as usize, key);
-            self.interrupt = false
         }
     }
 
-    pub fn add_key(&mut self, key: &Key) {
-        if convert_key_to_value(*key).is_none() {
+    pub fn add_key(&mut self, key: Key) {
+        if convert_key_to_value(key).is_none() {
             return;
         }
-        if !self.keys_pressed.contains(key) {
-            self.keys_pressed.push(*key);
+        if !self.keys_pressed.contains(&key) {
+            self.keys_pressed.push(key);
         }
     }
 
@@ -149,67 +144,6 @@ impl Interpreter {
     }
     pub fn get_last_key(&self) -> Option<&Key> {
         self.keys_pressed.last()
-    }
-
-    pub fn next(&mut self) {
-        //TODO: spostare questo nel metodo 'next' del tratto Iterator
-        // Fetch instruction
-        let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
-        self.regs.increment_pc();
-
-        // Decode and execute
-        match istro.opcode {
-            0x0 => match istro.func_code {
-                0x0 => self.disp.clear_display(),
-                0xE => self.regs.stack_pop(),
-                _ => panic!("instruction non-existent"),
-            },
-            0x1 => self.jump(istro),
-            0x2 => self.call_subroutine(istro),
-            0x3 => self.skip_if_equal_reg_byte(istro),
-            0x4 => self.skip_if_not_equal_reg_byte(istro),
-            0x5 => self.skip_if_equal_regs(istro),
-            0x6 => self.load_byte(istro),
-            0x7 => self.add_reg_byte(istro),
-            0x8 => match istro.func_code {
-                0x0 => self.move_regs(istro),
-                0x1 => self.or_regs(istro),
-                0x2 => self.and_regs(istro),
-                0x3 => self.xor_regs(istro),
-                0x4 => self.add_regs(istro),
-                0x5 => self.sub_regs(istro),
-                0x6 => self.shift_right_regs(istro),
-                0x7 => self.subn_regs(istro),
-                0xE => self.shift_left_regs(istro),
-                _ => panic!("instruction non-existent"),
-            },
-            0x9 => self.skip_if_not_equal_regs(istro),
-            0xA => self.load_addr(istro),
-            0xB => self.jump_rel_to_0(istro),
-            0xC => self.rand(istro),
-            0xD => self.todo_draw(istro),
-            0xE => match istro.func_code {
-                0x1 => self.skip_not_pressed(istro),
-                0xE => self.skip_pressed(istro),
-                _ => panic!("instruction non-existent"),
-            },
-            0xF => match istro.byte {
-                0x07 => self.read_dalay(istro),
-                0x0A => {
-                    self.interrupt = true;
-                    self.reg = istro.reg;
-                } // read key
-                0x15 => self.set_delay_timer(istro),
-                0x18 => self.set_sound_timer(istro),
-                0x1E => self.add_i_reg(istro),
-                0x29 => self.get_location_sprite(istro),
-                0x33 => self.convert_binary_to_dec(istro),
-                0x55 => self.save_regs(istro),
-                0x65 => self.load_regs(istro),
-                _ => panic!("instruction non-existent"),
-            },
-            _ => panic!("op code non-existent"),
-        }
     }
 
     fn jump(&mut self, istro: Istruction) {
@@ -386,6 +320,7 @@ impl Interpreter {
         self.regs.set_flag(collision)
     }
 
+    //TODO: c'è un bug qua da qualche parte
     fn skip_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
         if self.keys_pressed.iter().any(|k| *k == key) && !self.keys_pressed.is_empty() {
@@ -449,15 +384,77 @@ impl Interpreter {
             self.regs.set_v(r, buff[r])
         }
     }
-}
 
-impl Iterator for Interpreter {
-    type Item = bool;
+    pub fn next_istr(&mut self, interrupts: &Vec<Box<dyn Interrupt>>) {
+        //TODO: spostare questo nel metodo 'next' del tratto Iterator
+        // Fetch instruction
 
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        for inter in interrupts.iter() {
+            inter.handler(self).unwrap()
+        }
+
+        let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
+        self.regs.increment_pc();
+    
+        // Decode and execute
+        match istro.opcode {
+            0x0 => match istro.func_code {
+                0x0 => self.disp.clear_display(),
+                0xE => self.regs.stack_pop(),
+                _ => panic!("instruction non-existent"),
+            },
+            0x1 => self.jump(istro),
+            0x2 => self.call_subroutine(istro),
+            0x3 => self.skip_if_equal_reg_byte(istro),
+            0x4 => self.skip_if_not_equal_reg_byte(istro),
+            0x5 => self.skip_if_equal_regs(istro),
+            0x6 => self.load_byte(istro),
+            0x7 => self.add_reg_byte(istro),
+            0x8 => match istro.func_code {
+                0x0 => self.move_regs(istro),
+                0x1 => self.or_regs(istro),
+                0x2 => self.and_regs(istro),
+                0x3 => self.xor_regs(istro),
+                0x4 => self.add_regs(istro),
+                0x5 => self.sub_regs(istro),
+                0x6 => self.shift_right_regs(istro),
+                0x7 => self.subn_regs(istro),
+                0xE => self.shift_left_regs(istro),
+                _ => panic!("instruction non-existent"),
+            },
+            0x9 => self.skip_if_not_equal_regs(istro),
+            0xA => self.load_addr(istro),
+            0xB => self.jump_rel_to_0(istro),
+            0xC => self.rand(istro),
+            0xD => self.todo_draw(istro),
+            0xE => match istro.func_code {
+                0x1 => self.skip_not_pressed(istro),
+                0xE => self.skip_pressed(istro),
+                _ => panic!("instruction non-existent"),
+            },
+            0xF => match istro.byte {
+                0x07 => self.read_dalay(istro),
+                0x0A => {
+                    println!("qua");
+                    //TODO: fare in modo che se non c'è nessun tasto premuto di aspettare il tasto premuto
+                    self.set_key(*self.get_last_key().unwrap());
+                    self.reg = istro.reg;
+                } // read key
+                0x15 => self.set_delay_timer(istro),
+                0x18 => self.set_sound_timer(istro),
+                0x1E => self.add_i_reg(istro),
+                0x29 => self.get_location_sprite(istro),
+                0x33 => self.convert_binary_to_dec(istro),
+                0x55 => self.save_regs(istro),
+                0x65 => self.load_regs(istro),
+                _ => panic!("instruction non-existent"),
+            },
+            _ => panic!("op code non-existent"),
+        };
     }
 }
+
+
 
 impl Default for Interpreter {
     fn default() -> Self {
@@ -465,7 +462,6 @@ impl Default for Interpreter {
             regs: Default::default(),
             mem: Default::default(),
             disp: Default::default(),
-            interrupt: Default::default(),
             to_draw: Default::default(),
             keys_pressed: Vec::with_capacity(16), // 16 of capacity for 16 keys
             reg: Default::default(),
