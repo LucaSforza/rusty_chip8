@@ -1,13 +1,14 @@
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
+use std::sync::Arc;
 
 use minifb::Key;
 use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng};
 
 use crate::display::{Display, Sprite};
-use crate::interrupt::Interrupt;
+use crate::keyboard::DataKeys;
 use crate::memory::Memory;
 use crate::registers::Registers;
 
@@ -89,11 +90,23 @@ pub struct Interpreter {
     mem: Memory,
     disp: Display,
     to_draw: bool,
-    keys_pressed: Vec<Key>,
+    keyboard: Arc<DataKeys>,
     reg: u8,
     r_thread: ThreadRng,
 }
 impl Interpreter {
+
+    pub fn new(keyboard: Arc<DataKeys>) -> Self {
+        Self {
+            regs: Default::default(),
+            mem: Default::default(),
+            disp: Default::default(),
+            to_draw: Default::default(),
+            keyboard: keyboard,
+            reg: Default::default(),
+            r_thread: thread_rng(),
+        }
+    }
 
     pub fn write_rom_on_mem(&mut self, file: File) {
         let mut data = Vec::new();
@@ -118,32 +131,8 @@ impl Interpreter {
         }
     }
 
-    pub fn add_key(&mut self, key: Key) {
-        if convert_key_to_value(key).is_none() {
-            return;
-        }
-        if !self.keys_pressed.contains(&key) {
-            self.keys_pressed.push(key);
-        }
-    }
-
     pub fn to_draw(&self) -> bool {
         self.to_draw
-    }
-
-    pub fn release_key(&mut self, key: Key) {
-        if convert_key_to_value(key).is_none() {
-            return;
-        }
-        for (i, k) in self.keys_pressed.iter().enumerate() {
-            if *k == key {
-                self.keys_pressed.remove(i);
-                return;
-            }
-        }
-    }
-    pub fn get_last_key(&self) -> Option<&Key> {
-        self.keys_pressed.last()
     }
 
     fn jump(&mut self, istro: Istruction) {
@@ -323,14 +312,16 @@ impl Interpreter {
     //TODO: c'è un bug qua da qualche parte
     fn skip_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
-        if self.keys_pressed.iter().any(|k| *k == key) && !self.keys_pressed.is_empty() {
+        let pressed = self.keyboard.key_pressed(key);
+        println!("key: {key:?}, pressed: {pressed}");
+        if pressed {
             self.regs.increment_pc()
         }
     }
 
     fn skip_not_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
-        if self.keys_pressed.iter().all(|k| *k != key) || self.keys_pressed.is_empty() {
+        if self.keyboard.key_pressed(key) {
             self.regs.increment_pc()
         }
     }
@@ -385,13 +376,8 @@ impl Interpreter {
         }
     }
 
-    pub fn next_istr(&mut self, interrupts: &Vec<Box<dyn Interrupt>>) {
-        //TODO: spostare questo nel metodo 'next' del tratto Iterator
+    pub fn next_istr(&mut self) {
         // Fetch instruction
-
-        for inter in interrupts.iter() {
-            inter.handler(self).unwrap()
-        }
 
         let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
         self.regs.increment_pc();
@@ -437,7 +423,7 @@ impl Interpreter {
                 0x0A => {
                     println!("qua");
                     //TODO: fare in modo che se non c'è nessun tasto premuto di aspettare il tasto premuto
-                    self.set_key(*self.get_last_key().unwrap());
+                    self.set_key(self.keyboard.last_key().unwrap());
                     self.reg = istro.reg;
                 } // read key
                 0x15 => self.set_delay_timer(istro),
@@ -451,21 +437,5 @@ impl Interpreter {
             },
             _ => panic!("op code non-existent"),
         };
-    }
-}
-
-
-
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self {
-            regs: Default::default(),
-            mem: Default::default(),
-            disp: Default::default(),
-            to_draw: Default::default(),
-            keys_pressed: Vec::with_capacity(16), // 16 of capacity for 16 keys
-            reg: Default::default(),
-            r_thread: thread_rng(),
-        }
     }
 }
