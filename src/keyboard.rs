@@ -38,8 +38,9 @@ impl DataKeys {
 
     fn remove(&self, key: Key) {
         let mut buf = self.buf.lock().unwrap();
-        let index = buf.iter().position(|x| *x == key).unwrap();
-        buf.remove(index);
+        if let Some(index) = buf.iter().position(|x| *x == key) {
+            buf.remove(index);
+        }
     }
 }
 

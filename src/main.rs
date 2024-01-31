@@ -61,7 +61,6 @@ fn main() {
     let keyboard = KeyboardState::new(data_keys.clone());
 
     let mut interpreter = Interpreter::new(data_keys);
-    // It's safe because in Interpreter 'keyboard' read only the common buffer
     window.set_input_callback(keyboard);
 
     interpreter.write_rom_on_mem(file);
