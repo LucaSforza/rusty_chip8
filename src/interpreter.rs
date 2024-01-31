@@ -231,7 +231,7 @@ impl Interpreter {
 
         let x_value = self.regs.get_v(x);
         let y_value = self.regs.get_v(y);
-        if x_value > y_value {
+        if x_value >= y_value {
             self.regs.set_v(x, x_value - y_value);
             self.regs.set_flag(true);
         } else {
@@ -257,7 +257,7 @@ impl Interpreter {
 
         let x_value = self.regs.get_v(x);
         let y_value = self.regs.get_v(y);
-        if y_value > x_value {
+        if y_value >= x_value {
             self.regs.set_v(x, y_value - x_value);
             self.regs.set_flag(true);
         } else {
