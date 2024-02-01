@@ -17,7 +17,6 @@ impl DataKeys {
     }
 
     pub fn key_pressed(&self, key: Key) -> bool {
-        println!("key: {key:?}");
         self.buf.lock().unwrap().iter().any(|k| *k == key)
     }
 
@@ -70,10 +69,7 @@ impl InputCallback for KeyboardState {
 
     fn set_key_state(&mut self, key: Key, state: bool) {
         match state {
-            true => {
-                println!("premuto: {:?}",key);
-                self.keys_pressed.push(key);
-            },
+            true => self.keys_pressed.push(key),
             false => self.keys_pressed.remove(key),
         }
     }
