@@ -17,11 +17,13 @@ impl DataKeys {
     }
 
     pub fn key_pressed(&self, key: Key) -> bool {
+        println!("key: {key:?}");
         self.buf.lock().unwrap().iter().any(|k| *k == key)
     }
 
-    pub fn wait_key_pressed(&self, key: Key) {
-        while !self.key_pressed(key) { }
+    pub fn wait_key_pressed(&self) {
+        let len = self.buf.lock().unwrap().len();
+        while len == self.buf.lock().unwrap().len() { }
     }
 
     pub fn last_key(&self) -> Option<Key> {
@@ -46,7 +48,7 @@ impl DataKeys {
 
 impl fmt::Debug for DataKeys {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DataKeys").field("buf", &self.buf).field("last_key_pressed", &self.last_key_pressed).finish()
+        write!(f,"{:?}",self.buf)
     }
 }
 

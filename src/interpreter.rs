@@ -309,7 +309,6 @@ impl Interpreter {
         self.regs.set_flag(collision)
     }
 
-    //TODO: c'è un bug qua da qualche parte
     fn skip_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
         let pressed = self.keyboard.key_pressed(key);
@@ -321,7 +320,7 @@ impl Interpreter {
 
     fn skip_not_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
-        if self.keyboard.key_pressed(key) {
+        if !self.keyboard.key_pressed(key) {
             self.regs.increment_pc()
         }
     }
@@ -421,8 +420,7 @@ impl Interpreter {
             0xF => match istro.byte {
                 0x07 => self.read_dalay(istro),
                 0x0A => {
-                    println!("qua");
-                    //TODO: fare in modo che se non c'è nessun tasto premuto di aspettare il tasto premuto
+                    self.keyboard.wait_key_pressed();
                     self.set_key(self.keyboard.last_key().unwrap());
                     self.reg = istro.reg;
                 } // read key
