@@ -311,9 +311,7 @@ impl Interpreter {
 
     fn skip_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
-        let pressed = self.keyboard.key_pressed(key);
-        println!("key: {key:?}, pressed: {pressed}");
-        if pressed {
+        if self.keyboard.key_pressed(key) {
             self.regs.increment_pc()
         }
     }
