@@ -1,5 +1,4 @@
-use std::time::Duration;
-use std::{fmt, thread};
+use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;

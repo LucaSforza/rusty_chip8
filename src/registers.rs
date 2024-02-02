@@ -7,7 +7,7 @@ pub struct Registers {
     stack: Vec<u16>,
     sound_timer: Arc<Mutex<u8>>,
     delay_timer: Arc<Mutex<u8>>,
-    decrement_thread: thread::JoinHandle<()>,
+    _decrement_thread: thread::JoinHandle<()>,
 }
 impl Registers {
     pub fn get_v(&self, v_reg: usize) -> u8 {
@@ -90,7 +90,7 @@ impl Default for Registers {
             stack: Vec::with_capacity(16),
             sound_timer: sound_t,
             delay_timer: delay_t,
-            decrement_thread: thread,
+            _decrement_thread: thread,
         }
     }
 }
