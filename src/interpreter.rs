@@ -1,11 +1,14 @@
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
+use std::sync::Arc;
 
 use minifb::Key;
-use rand::Rng;
+use rand::rngs::ThreadRng;
+use rand::{thread_rng, Rng};
 
 use crate::display::{Display, Sprite};
+use crate::keyboard::DataKeys;
 use crate::memory::Memory;
 use crate::registers::Registers;
 
@@ -86,12 +89,24 @@ pub struct Interpreter {
     regs: Registers,
     mem: Memory,
     disp: Display,
-    interrupt: bool,
     to_draw: bool,
-    keys_pressed: Vec<Key>,
+    keyboard: Arc<DataKeys>,
     reg: u8,
+    r_thread: ThreadRng,
 }
 impl Interpreter {
+
+    pub fn new(keyboard: Arc<DataKeys>) -> Self {
+        Self {
+            regs: Default::default(),
+            mem: Default::default(),
+            disp: Default::default(),
+            to_draw: Default::default(),
+            keyboard: keyboard,
+            reg: Default::default(),
+            r_thread: thread_rng(),
+        }
+    }
 
     pub fn write_rom_on_mem(&mut self, file: File) {
         let mut data = Vec::new();
@@ -101,104 +116,23 @@ impl Interpreter {
         }
         self.mem.write_slice(0x200, data.as_slice())
     }
+
     pub fn draw(&mut self, buf: &mut [u32]) {
         self.disp.draw(buf);
     }
+
     pub fn sound_is_playing(&self) -> bool {
         self.regs.get_sound() != 0
     }
-    pub fn interrupt(&self) -> bool {
-        self.interrupt
-    }
+
     pub fn set_key(&mut self, key: Key) {
         if let Some(key) = convert_key_to_value(key) {
             self.regs.set_v(self.reg as usize, key);
-            self.interrupt = false
         }
     }
-    pub fn add_key(&mut self, key: &Key) {
-        if convert_key_to_value(*key).is_none() {
-            return;
-        }
-        if !self.keys_pressed.contains(key) {
-            self.keys_pressed.push(*key);
-        }
-    }
+
     pub fn to_draw(&self) -> bool {
         self.to_draw
-    }
-    pub fn release_key(&mut self, key: Key) {
-        if convert_key_to_value(key).is_none() {
-            return;
-        }
-        for (i, k) in self.keys_pressed.iter().enumerate() {
-            if *k == key {
-                self.keys_pressed.remove(i);
-                return;
-            }
-        }
-    }
-    pub fn get_last_key(&self) -> Option<&Key> {
-        self.keys_pressed.last()
-    }
-    pub fn next(&mut self) {
-        // Fetch instruction
-        let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
-        self.regs.increment_pc();
-
-        // Decode and execute
-        match istro.opcode {
-            0x0 => match istro.func_code {
-                0x0 => self.disp.clear_display(),
-                0xE => self.regs.stack_pop(),
-                _ => panic!("instruction non-existent"),
-            },
-            0x1 => self.jump(istro),
-            0x2 => self.call_subroutine(istro),
-            0x3 => self.skip_if_equal_reg_byte(istro),
-            0x4 => self.skip_if_not_equal_reg_byte(istro),
-            0x5 => self.skip_if_equal_regs(istro),
-            0x6 => self.load_byte(istro),
-            0x7 => self.add_reg_byte(istro),
-            0x8 => match istro.func_code {
-                0x0 => self.move_regs(istro),
-                0x1 => self.or_regs(istro),
-                0x2 => self.and_regs(istro),
-                0x3 => self.xor_regs(istro),
-                0x4 => self.add_regs(istro),
-                0x5 => self.sub_regs(istro),
-                0x6 => self.shift_right_regs(istro),
-                0x7 => self.subn_regs(istro),
-                0xE => self.shift_left_regs(istro),
-                _ => panic!("instruction non-existent"),
-            },
-            0x9 => self.skip_if_not_equal_regs(istro),
-            0xA => self.load_addr(istro),
-            0xB => self.jump_rel_to_0(istro),
-            0xC => self.rand(istro),
-            0xD => self.todo_draw(istro),
-            0xE => match istro.func_code {
-                0x1 => self.skip_not_pressed(istro),
-                0xE => self.skip_pressed(istro),
-                _ => panic!("instruction non-existent"),
-            },
-            0xF => match istro.byte {
-                0x07 => self.read_dalay(istro),
-                0x0A => {
-                    self.interrupt = true;
-                    self.reg = istro.reg;
-                } // read key
-                0x15 => self.set_delay_timer(istro),
-                0x18 => self.set_sound_timer(istro),
-                0x1E => self.add_i_reg(istro),
-                0x29 => self.get_location_sprite(istro),
-                0x33 => self.convert_binary_to_dec(istro),
-                0x55 => self.save_regs(istro),
-                0x65 => self.load_regs(istro),
-                _ => panic!("instruction non-existent"),
-            },
-            _ => panic!("op code non-existent"),
-        }
     }
 
     fn jump(&mut self, istro: Istruction) {
@@ -216,12 +150,14 @@ impl Interpreter {
             self.regs.increment_pc()
         }
     }
+
     fn skip_if_not_equal_reg_byte(&mut self, istro: Istruction) {
         let x_value = self.regs.get_v(istro.reg as usize);
         if x_value != istro.byte {
             self.regs.increment_pc()
         }
     }
+
     fn skip_if_equal_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -234,11 +170,13 @@ impl Interpreter {
         let x = istro.reg as usize;
         self.regs.set_v(x, istro.byte)
     }
+
     fn add_reg_byte(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let new_val = istro.byte as u16 + self.regs.get_v(x) as u16;
         self.regs.set_v(x, new_val as u8)
     }
+
     fn move_regs(&mut self, istro: Istruction) {
         let x = istro.reg;
         let y = istro.nibbles;
@@ -255,6 +193,7 @@ impl Interpreter {
         self.regs.set_v(x, new_val);
         self.regs.set_flag(false)
     }
+
     fn and_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -264,6 +203,7 @@ impl Interpreter {
         self.regs.set_v(x, new_val);
         self.regs.set_flag(false)
     }
+
     fn xor_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -273,6 +213,7 @@ impl Interpreter {
         self.regs.set_v(x, new_val);
         self.regs.set_flag(false)
     }
+
     fn add_regs(&mut self, istro: Istruction) {
         let x = istro.reg as usize;
         let y = istro.nibbles as usize;
@@ -290,7 +231,7 @@ impl Interpreter {
 
         let x_value = self.regs.get_v(x);
         let y_value = self.regs.get_v(y);
-        if x_value > y_value {
+        if x_value >= y_value {
             self.regs.set_v(x, x_value - y_value);
             self.regs.set_flag(true);
         } else {
@@ -316,7 +257,7 @@ impl Interpreter {
 
         let x_value = self.regs.get_v(x);
         let y_value = self.regs.get_v(y);
-        if y_value > x_value {
+        if y_value >= x_value {
             self.regs.set_v(x, y_value - x_value);
             self.regs.set_flag(true);
         } else {
@@ -351,8 +292,7 @@ impl Interpreter {
     }
 
     fn rand(&mut self, istro: Istruction) {
-        let mut rng = rand::thread_rng();
-        let random_byte = rng.gen_range(0..256) as u8;
+        let random_byte = self.r_thread.gen_range(0..256) as u8;
         let bit_mask = istro.byte;
         let x = istro.reg;
         self.regs.set_v(x as usize, random_byte & bit_mask)
@@ -371,14 +311,14 @@ impl Interpreter {
 
     fn skip_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
-        if self.keys_pressed.iter().any(|k| *k == key) && !self.keys_pressed.is_empty() {
+        if self.keyboard.key_pressed(key) {
             self.regs.increment_pc()
         }
     }
 
     fn skip_not_pressed(&mut self, istro: Istruction) {
         let key = convert_num_to_key(self.regs.get_v(istro.reg as usize));
-        if self.keys_pressed.iter().all(|k| *k != key) || self.keys_pressed.is_empty() {
+        if !self.keyboard.key_pressed(key) {
             self.regs.increment_pc()
         }
     }
@@ -432,25 +372,66 @@ impl Interpreter {
             self.regs.set_v(r, buff[r])
         }
     }
-}
 
-impl Iterator for Interpreter {
-    type Item = bool;
+    pub fn next_istr(&mut self) {
+        // Fetch instruction
 
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self {
-            regs: Default::default(),
-            mem: Default::default(),
-            disp: Default::default(),
-            interrupt: Default::default(),
-            to_draw: Default::default(),
-            keys_pressed: Vec::with_capacity(16), // 16 of capacity for 16 keys
-            reg: Default::default(),
-        }
+        let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
+        self.regs.increment_pc();
+    
+        // Decode and execute
+        match istro.opcode {
+            0x0 => match istro.func_code {
+                0x0 => self.disp.clear_display(),
+                0xE => self.regs.stack_pop(),
+                _ => panic!("instruction non-existent"),
+            },
+            0x1 => self.jump(istro),
+            0x2 => self.call_subroutine(istro),
+            0x3 => self.skip_if_equal_reg_byte(istro),
+            0x4 => self.skip_if_not_equal_reg_byte(istro),
+            0x5 => self.skip_if_equal_regs(istro),
+            0x6 => self.load_byte(istro),
+            0x7 => self.add_reg_byte(istro),
+            0x8 => match istro.func_code {
+                0x0 => self.move_regs(istro),
+                0x1 => self.or_regs(istro),
+                0x2 => self.and_regs(istro),
+                0x3 => self.xor_regs(istro),
+                0x4 => self.add_regs(istro),
+                0x5 => self.sub_regs(istro),
+                0x6 => self.shift_right_regs(istro),
+                0x7 => self.subn_regs(istro),
+                0xE => self.shift_left_regs(istro),
+                _ => panic!("instruction non-existent"),
+            },
+            0x9 => self.skip_if_not_equal_regs(istro),
+            0xA => self.load_addr(istro),
+            0xB => self.jump_rel_to_0(istro),
+            0xC => self.rand(istro),
+            0xD => self.todo_draw(istro),
+            0xE => match istro.func_code {
+                0x1 => self.skip_not_pressed(istro),
+                0xE => self.skip_pressed(istro),
+                _ => panic!("instruction non-existent"),
+            },
+            0xF => match istro.byte {
+                0x07 => self.read_dalay(istro),
+                0x0A => {
+                    self.keyboard.wait_key_pressed();
+                    self.set_key(self.keyboard.last_key().unwrap());
+                    self.reg = istro.reg;
+                } // read key
+                0x15 => self.set_delay_timer(istro),
+                0x18 => self.set_sound_timer(istro),
+                0x1E => self.add_i_reg(istro),
+                0x29 => self.get_location_sprite(istro),
+                0x33 => self.convert_binary_to_dec(istro),
+                0x55 => self.save_regs(istro),
+                0x65 => self.load_regs(istro),
+                _ => panic!("instruction non-existent"),
+            },
+            _ => panic!("op code non-existent"),
+        };
     }
 }
