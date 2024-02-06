@@ -91,19 +91,17 @@ pub struct Interpreter {
     disp: Display,
     to_draw: bool,
     keyboard: Arc<DataKeys>,
-    reg: u8,
     r_thread: ThreadRng,
 }
 impl Interpreter {
 
     pub fn new(keyboard: Arc<DataKeys>) -> Self {
         Self {
-            regs: Default::default(),
+            regs: Registers::new(keyboard.clone()),
             mem: Default::default(),
             disp: Default::default(),
             to_draw: Default::default(),
             keyboard: keyboard,
-            reg: Default::default(),
             r_thread: thread_rng(),
         }
     }
@@ -123,12 +121,6 @@ impl Interpreter {
 
     pub fn sound_is_playing(&self) -> bool {
         self.regs.get_sound() != 0
-    }
-
-    pub fn set_key(&mut self, key: Key) {
-        if let Some(key) = convert_key_to_value(key) {
-            self.regs.set_v(self.reg as usize, key);
-        }
     }
 
     pub fn to_draw(&self) -> bool {
@@ -373,6 +365,18 @@ impl Interpreter {
         }
     }
 
+    fn wait_key_pressed(&mut self,istro: Istruction) {
+        if !self.keyboard.new_press() {
+            self.regs.set_pc(self.regs.get_pc() - 2);
+            return;
+        }
+        let key = convert_key_to_value(self.keyboard._last_key().unwrap());
+        if key.is_none() {
+            return;
+        }
+        self.regs.set_v(istro.reg as usize, key.unwrap());
+    }
+
     pub fn next_istr(&mut self) {
         // Fetch instruction
 
@@ -417,11 +421,7 @@ impl Interpreter {
             },
             0xF => match istro.byte {
                 0x07 => self.read_dalay(istro),
-                0x0A => {
-                    self.keyboard.wait_key_pressed();
-                    self.set_key(self.keyboard.last_key().unwrap());
-                    self.reg = istro.reg;
-                } // read key
+                0x0A => self.wait_key_pressed(istro), // read key
                 0x15 => self.set_delay_timer(istro),
                 0x18 => self.set_sound_timer(istro),
                 0x1E => self.add_i_reg(istro),
