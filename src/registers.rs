@@ -1,5 +1,7 @@
 use std::{fmt, sync::{Arc, Mutex}, thread, time::Duration};
 
+use crate::keyboard::{DataKeys, ONEHERTZ};
+
 pub struct Registers {
     v: [u8; 16],
     i: u16,
@@ -10,6 +12,43 @@ pub struct Registers {
     _decrement_thread: thread::JoinHandle<()>,
 }
 impl Registers {
+
+    pub fn new(data_keys: Arc<DataKeys>) -> Self {
+        let sound_timer: Arc<Mutex<u8>> = Default::default();
+        let delay_timer: Arc<Mutex<u8>> = Default::default();
+        let sound_t = sound_timer.clone();
+        let delay_t = delay_timer.clone();
+
+        let thread = thread::spawn(move || {
+            let sound_t = sound_timer.clone();
+            let delay_t = delay_timer.clone();
+            loop {
+                thread::sleep(Duration::from_secs_f64(ONEHERTZ));
+                {
+                    let mut sound = sound_t.lock().unwrap();
+                    let mut delay = delay_t.lock().unwrap();
+                    if *sound != 0 {
+                        *sound -= 1
+                    }
+                    if *delay != 0 {
+                        *delay -= 1
+                    }
+                    data_keys.reset_new_pressed_flag();
+                }
+            }
+        });
+
+        Self {
+            v: Default::default(),
+            i: Default::default(),
+            pc: 0x200,
+            stack: Vec::with_capacity(16),
+            sound_timer: sound_t,
+            delay_timer: delay_t,
+            _decrement_thread: thread,
+        }
+    }
+
     pub fn get_v(&self, v_reg: usize) -> u8 {
         self.v[v_reg]
     }
@@ -57,43 +96,7 @@ impl Registers {
     }
 
 }
-impl Default for Registers {
-    fn default() -> Self {
 
-        let sound_timer: Arc<Mutex<u8>> = Default::default();
-        let delay_timer: Arc<Mutex<u8>> = Default::default();
-        let sound_t = sound_timer.clone();
-        let delay_t = delay_timer.clone();
-
-        let thread = thread::spawn(move || {
-            let sound_t = sound_timer.clone();
-            let delay_t = delay_timer.clone();
-            loop {
-                thread::sleep(Duration::from_secs_f64(1.0/60.0));
-                {
-                    let mut sound = sound_t.lock().unwrap();
-                    let mut delay = delay_t.lock().unwrap();
-                    if *sound != 0 {
-                        *sound -= 1
-                    }
-                    if *delay != 0 {
-                        *delay -= 1
-                    }
-                }
-            }
-        });
-
-        Self {
-            v: Default::default(),
-            i: Default::default(),
-            pc: 0x200,
-            stack: Vec::with_capacity(16),
-            sound_timer: sound_t,
-            delay_timer: delay_t,
-            _decrement_thread: thread,
-        }
-    }
-}
 impl fmt::Display for Registers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "v regs: [")?;

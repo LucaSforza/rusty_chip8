@@ -4,7 +4,7 @@ mod interpreter;
 mod memory;
 mod registers;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{env, fs::File, path::Path};
 
 use crate::interpreter::Interpreter;
@@ -57,8 +57,10 @@ fn main() {
 
     window.limit_update_rate(Some(std::time::Duration::from_micros(1300)));
 
-    let data_keys = Arc::new(DataKeys::new());
-    let keyboard = KeyboardState::new(data_keys.clone());
+    let new_key_press: Arc<Mutex<bool>> = Default::default();
+
+    let data_keys = Arc::new(DataKeys::new(new_key_press.clone()));
+    let keyboard = KeyboardState::new(data_keys.clone(),new_key_press);
 
     let mut interpreter = Interpreter::new(data_keys);
     window.set_input_callback(keyboard);
