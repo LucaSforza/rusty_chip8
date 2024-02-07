@@ -14,7 +14,6 @@ use crate::registers::Registers;
 
 #[derive(Clone)]
 struct Istruction {
-    val: u16,
     opcode: u8,
     reg: u8,
     nibbles: u8,
@@ -25,7 +24,6 @@ struct Istruction {
 impl Istruction {
     fn new(value: u16) -> Istruction {
         Istruction {
-            val: value,
             opcode: (value >> 12) as u8,
             reg: ((value & 0x0F00) >> 8) as u8,
             nibbles: ((value & 0x00F0) >> 4) as u8,
@@ -37,7 +35,7 @@ impl Istruction {
 }
 impl fmt::Debug for Istruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:X}", self.val)
+        write!(f, "0x{:X}{:X}{:X}{:X}", self.opcode, self.reg, self.nibbles, self.func_code)
     }
 }
 
@@ -388,7 +386,7 @@ impl Interpreter {
             0x0 => match istro.func_code {
                 0x0 => self.disp.clear_display(),
                 0xE => self.regs.stack_pop(),
-                _ => panic!("instruction non-existent"),
+                _ => panic!("Instruction non-existent: {istro:?}, PC:"),
             },
             0x1 => self.jump(istro),
             0x2 => self.call_subroutine(istro),
@@ -407,7 +405,7 @@ impl Interpreter {
                 0x6 => self.shift_right_regs(istro),
                 0x7 => self.subn_regs(istro),
                 0xE => self.shift_left_regs(istro),
-                _ => panic!("instruction non-existent"),
+                _ => panic!("instruction non-existent: {istro:?}"),
             },
             0x9 => self.skip_if_not_equal_regs(istro),
             0xA => self.load_addr(istro),
@@ -417,7 +415,7 @@ impl Interpreter {
             0xE => match istro.func_code {
                 0x1 => self.skip_not_pressed(istro),
                 0xE => self.skip_pressed(istro),
-                _ => panic!("instruction non-existent"),
+                _ => panic!("instruction non-existent: {istro:?}"),
             },
             0xF => match istro.byte {
                 0x07 => self.read_dalay(istro),
@@ -429,9 +427,9 @@ impl Interpreter {
                 0x33 => self.convert_binary_to_dec(istro),
                 0x55 => self.save_regs(istro),
                 0x65 => self.load_regs(istro),
-                _ => panic!("instruction non-existent"),
+                _ => panic!("instruction non-existent: {istro:?}"),
             },
-            _ => panic!("op code non-existent"),
+            _ => panic!("op code non-existent: {istro:?}"),
         };
     }
 }
