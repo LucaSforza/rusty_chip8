@@ -6,6 +6,7 @@ mod registers;
 
 use std::process::exit;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 use std::{env, fs::File, path::Path};
 
 use crate::interpreter::Interpreter;
@@ -17,6 +18,7 @@ use rodio::{OutputStream, Sink};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 320;
+const FRAME4FRAME: usize = 50;
 
 fn main() {
     let mut args = env::args();
@@ -57,21 +59,24 @@ fn main() {
         exit(1)
     });
 
-    window.limit_update_rate(Some(std::time::Duration::from_micros(1300)));
-
     let new_key_press: Arc<Mutex<bool>> = Default::default();
 
     let data_keys = Arc::new(DataKeys::new(new_key_press.clone()));
-    let keyboard = KeyboardState::new(data_keys.clone(),new_key_press);
+    let keyboard = KeyboardState::new(data_keys.clone());
 
     let mut interpreter = Interpreter::new(data_keys);
     window.set_input_callback(keyboard);
 
     interpreter.write_rom_on_mem(file);
 
+    let mut cycles_count = 0;
+
+    let mut fps = 0;
+    let mut last_time = SystemTime::now();
+
     //While loop for when the window is open and the escape key is not pressed
     while window.is_open() && !window.is_key_down(Key::Escape) {
-
+        cycles_count += 1;
         interpreter.next_istr();
 
         if interpreter.sound_is_playing() {
@@ -80,9 +85,21 @@ fn main() {
             sink.pause()
         }
 
-        if interpreter.to_draw() {
-            interpreter.draw(&mut buffer);
-            window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+
+        if cycles_count == FRAME4FRAME {
+            if interpreter.to_draw() {
+                interpreter.draw(&mut buffer);
+                window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+            }
+            let now = SystemTime::now();
+            let duration = now.duration_since(last_time).unwrap();
+            fps += 1;
+            if duration.as_secs_f64() >= 1.0 {
+                println!("FPS: {fps}");
+                last_time = now;
+                fps = 0;
+            }
+            cycles_count = 0;
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::{fmt, process::exit, sync::{Arc, Mutex}, thread, time::{Duration, SystemTime}};
 
-use crate::keyboard::{DataKeys, ONEHERTZ};
+use crate::keyboard::ONEHERTZ;
 
 pub struct Registers {
     v: [u8; 16],
@@ -13,7 +13,7 @@ pub struct Registers {
 }
 impl Registers {
 
-    pub fn new(data_keys: Arc<DataKeys>) -> Self {
+    pub fn new() -> Self {
         let sound_timer: Arc<Mutex<u8>> = Default::default();
         let delay_timer: Arc<Mutex<u8>> = Default::default();
         let sound_t = sound_timer.clone();
@@ -39,9 +39,6 @@ impl Registers {
                     let d = *delay;
                     if d != 0 {
                         *delay = d.checked_sub(val).unwrap_or(0);
-                    }
-                    if val >= 1 {
-                        data_keys.reset_new_pressed_flag();
                     }
                 }
             }

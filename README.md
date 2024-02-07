@@ -3,6 +3,15 @@
 
 This is a simple emulator for the chip8
 
+## Link
+
+Inspired by [Octo](https://github.com/JohnEarnest/Octo).
+
+Third-party games:
+
+- [Glitch Ghost](https://github.com/jackiekircher/glitch-ghost) by Jackie Kircher.
+- source code of Chip War, Cave Explorer, Default, Fez can be found [here](https://github.com/JohnEarnest/Octo/tree/gh-pages/examples) 
+
 
 ## Run Locally
 
@@ -29,9 +38,3 @@ Run the emulator
 ```bash
   cargo run <path to a bytecode file>
 ```
-
-
-## TODO
-
-- Move the functions in 'istruction.rs' inside 'impl Interpreter' in 'interpreter.rs' file
-- Add 'cycles by frame' feature like [octo](http://johnearnest.github.io/Octo/).
