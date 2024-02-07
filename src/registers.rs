@@ -1,4 +1,4 @@
-use std::{fmt, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{fmt, sync::{Arc, Mutex}, thread, time::Duration, time::SystemTime};
 
 use crate::keyboard::{DataKeys, ONEHERTZ};
 
@@ -22,18 +22,27 @@ impl Registers {
         let thread = thread::spawn(move || {
             let sound_t = sound_timer.clone();
             let delay_t = delay_timer.clone();
+            let mut last_sys_time = SystemTime::now();
             loop {
                 thread::sleep(Duration::from_secs_f64(ONEHERTZ));
                 {
                     let mut sound = sound_t.lock().unwrap();
                     let mut delay = delay_t.lock().unwrap();
-                    if *sound != 0 {
-                        *sound -= 1
+                    let new_sys_time = SystemTime::now();
+                    let difference = new_sys_time.duration_since(last_sys_time).expect("Clock may have gone backwards");
+                    last_sys_time = new_sys_time;
+                    let val = (difference.as_millis() % 16) as u8;
+                    let s = *sound;
+                    if s != 0 {
+                        *sound -= s.checked_sub(val).unwrap_or(0);
                     }
-                    if *delay != 0 {
-                        *delay -= 1
+                    let d = *delay;
+                    if d != 0 {
+                        *delay = d.checked_sub(val).unwrap_or(0);
                     }
-                    data_keys.reset_new_pressed_flag();
+                    if val >= 1 {
+                        data_keys.reset_new_pressed_flag();
+                    }
                 }
             }
         });

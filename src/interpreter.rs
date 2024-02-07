@@ -376,8 +376,7 @@ impl Interpreter {
     }
 
     pub fn next_istr(&mut self) {
-        // Fetch instruction
-
+        // Fetch instruction        
         let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
         self.regs.increment_pc();
     
