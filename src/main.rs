@@ -4,6 +4,7 @@ mod interpreter;
 mod memory;
 mod registers;
 
+use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::{env, fs::File, path::Path};
 
@@ -52,7 +53,8 @@ fn main() {
     )
     //Panic method to handle errors when working with result object
     .unwrap_or_else(|e| {
-        panic!("{}", e);
+        eprintln!("[MINIFB ERROR] {}", e);
+        exit(1)
     });
 
     window.limit_update_rate(Some(std::time::Duration::from_micros(1300)));

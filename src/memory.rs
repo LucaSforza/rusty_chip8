@@ -1,3 +1,5 @@
+use std::process::exit;
+
 const CAPACITY: usize = 4096; // bytes
 
 const FONT: [u8; 80] = [
@@ -42,6 +44,10 @@ impl Memory {
     pub fn write_slice(&mut self, address: u16, slice: &[u8]) {
         let address = address as usize;
         let len = slice.len();
+        if address + len >= self.buf.capacity() {
+            eprintln!("[PANIC] memory overflow");
+            exit(1);
+        }
         self.buf[address..address+len].copy_from_slice(slice);
     }
 }
