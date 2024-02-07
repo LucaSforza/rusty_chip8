@@ -1,3 +1,5 @@
+use std::process::exit;
+
 pub const HEIGHT: usize = 32;
 pub const WIDTH: usize = 64;
 pub const REAL_HEIGHT: usize = 320;
@@ -40,7 +42,8 @@ impl Display {
     }
     pub fn draw(&self, buf: &mut [u32]) {
         if buf.len() != REAL_HEIGHT * REAL_WIDTH {
-            panic!("the buffer is incorrect")
+                eprintln!("[PANIC] the buffer is incorrect");
+                exit(1);
         }
 
         for (n_row, row) in self.buf.iter().enumerate() {
@@ -76,7 +79,8 @@ pub struct Sprite {
 impl Sprite {
     pub fn from_slice(slice: &[u8], x: u8, y: u8) -> Sprite {
         if slice.len() > 15 {
-            panic!("the slice must be of lenght between 0 and 15")
+                eprintln!("[PANIC] the slice must be of lenght between 0 and 15");
+                exit(1);
         }
         let mut bytes: Vec<u8> = vec![0; slice.len()];
         slice

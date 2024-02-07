@@ -1,4 +1,4 @@
-use std::{fmt, sync::{Arc, Mutex}, thread, time::Duration, time::SystemTime};
+use std::{fmt, process::exit, sync::{Arc, Mutex}, thread, time::{Duration, SystemTime}};
 
 use crate::keyboard::{DataKeys, ONEHERTZ};
 
@@ -88,7 +88,10 @@ impl Registers {
     pub fn stack_pop(&mut self) {
         match self.stack.pop() {
             Some(pc) => self.pc = pc,
-            None => panic!("stack overflow ,the sp can't be < 0"),
+            None => {
+                eprintln!("[PANIC] stack underflow ,the sp can't be < 0");
+                exit(1);
+            },
         }
     }
     pub fn set_delay(&mut self, val: u8) {

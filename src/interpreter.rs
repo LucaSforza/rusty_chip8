@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
+use std::process::exit;
 use std::sync::Arc;
 
 use minifb::Key;
@@ -79,7 +80,10 @@ pub fn convert_num_to_key(key: u8) -> Key {
         0xD => Key::R,
         0xE => Key::F,
         0xF => Key::V,
-        _ => panic!("key inesistent"),
+        other => {
+            eprintln!("[PANIC] key inesistent {other}");
+            exit(1);
+        },
     }
 }
 
@@ -385,7 +389,10 @@ impl Interpreter {
             0x0 => match istro.func_code {
                 0x0 => self.disp.clear_display(),
                 0xE => self.regs.stack_pop(),
-                _ => panic!("Instruction non-existent: {istro:?}, PC:"),
+                _ => {
+                    eprintln!("[PANIC] instruction non-existent\nistro: {istro:?}\nPC: {}", self.regs.get_pc());
+                    exit(1);
+                },
             },
             0x1 => self.jump(istro),
             0x2 => self.call_subroutine(istro),
@@ -404,7 +411,10 @@ impl Interpreter {
                 0x6 => self.shift_right_regs(istro),
                 0x7 => self.subn_regs(istro),
                 0xE => self.shift_left_regs(istro),
-                _ => panic!("instruction non-existent: {istro:?}"),
+                _ => {
+                    eprintln!("[PANIC] instruction non-existent\nistro: {istro:?}\nPC: {}", self.regs.get_pc());
+                    exit(1);
+                },
             },
             0x9 => self.skip_if_not_equal_regs(istro),
             0xA => self.load_addr(istro),
@@ -414,7 +424,10 @@ impl Interpreter {
             0xE => match istro.func_code {
                 0x1 => self.skip_not_pressed(istro),
                 0xE => self.skip_pressed(istro),
-                _ => panic!("instruction non-existent: {istro:?}"),
+                _ => {
+                    eprintln!("[PANIC] instruction non-existent\nistro: {istro:?}\nPC: {}", self.regs.get_pc());
+                    exit(1);
+                },
             },
             0xF => match istro.byte {
                 0x07 => self.read_dalay(istro),
@@ -426,9 +439,15 @@ impl Interpreter {
                 0x33 => self.convert_binary_to_dec(istro),
                 0x55 => self.save_regs(istro),
                 0x65 => self.load_regs(istro),
-                _ => panic!("instruction non-existent: {istro:?}"),
+                _ => {
+                    eprintln!("[PANIC] instruction non-existent\nistro: {istro:?}\nPC: {}", self.regs.get_pc());
+                    exit(1);
+                },
             },
-            _ => panic!("op code non-existent: {istro:?}"),
+            _ => {
+                eprintln!("[PANIC] instruction non-existent\nistro: {istro:?}\nPC: {}", self.regs.get_pc());
+                exit(1);
+            },
         };
     }
 }
