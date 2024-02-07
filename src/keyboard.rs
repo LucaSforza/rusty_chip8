@@ -9,6 +9,7 @@ pub struct DataKeys {
     buf: Mutex<Vec<Key>>,
     last_key_pressed: Mutex<Option<Key>>,
     new_pressed: Arc<Mutex<bool>>,
+    i: Mutex<usize>,
 }
 
 impl DataKeys {
@@ -18,6 +19,7 @@ impl DataKeys {
             buf: Mutex::new(Vec::with_capacity(16)), // because the keyboard has only 16 keys
             last_key_pressed: Mutex::new(None),
             new_pressed: new_pressed,
+            i: 0.into(),
         }
     }
 
@@ -39,20 +41,25 @@ impl DataKeys {
     }
 
     fn push(&self, key: Key) {
-        let mut last_key_pressed = self.last_key_pressed.lock().unwrap();
         let mut buf = self.buf.lock().unwrap();
+        *self.new_pressed.lock().unwrap() = true;
         if buf.iter().all(|k| *k != key) {
             buf.push(key);
-            *last_key_pressed = Some(key);
         }
     }
 
     fn remove(&self, key: Key) {
+        let mut i = self.i.lock().unwrap();
+        *i += 1;
         let mut buf = self.buf.lock().unwrap();
         if let Some(index) = buf.iter().position(|x| *x == key) {
             buf.remove(index);
         }
     }
+
+    fn set_new_key(&self, key: Key) {
+        *self.last_key_pressed.lock().unwrap() = Some(key)
+    } 
 }
 
 impl fmt::Debug for DataKeys {
@@ -63,28 +70,31 @@ impl fmt::Debug for DataKeys {
 
 pub struct KeyboardState {
     keys_pressed: Arc<DataKeys>,
-    new_pressed: Arc<Mutex<bool>>
 }
 
 impl KeyboardState {
-    pub fn new(buf: Arc<DataKeys>, new_pressed:  Arc<Mutex<bool>>) -> Box<Self> {
+    pub fn new(buf: Arc<DataKeys>) -> Box<Self> {
         Box::new(Self {
             keys_pressed: buf,
-            new_pressed: new_pressed,
         })
     }
 
 }
 
 impl InputCallback for KeyboardState {
-    fn add_char(&mut self, _uni_char: u32) {
-        *self.new_pressed.lock().unwrap() = true;
-    }
+    fn add_char(&mut self, _uni_char: u32) { }
 
     fn set_key_state(&mut self, key: Key, state: bool) {
         match state {
-            true => self.keys_pressed.push(key),
-            false => self.keys_pressed.remove(key),
+            true => {
+                if !self.keys_pressed.key_pressed(key) {
+                    self.keys_pressed.push(key);
+                    self.keys_pressed.set_new_key(key);
+                }    
+            },
+            false => {
+                self.keys_pressed.remove(key)
+            },
         }
     }
 }

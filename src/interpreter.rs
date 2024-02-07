@@ -99,7 +99,7 @@ impl Interpreter {
 
     pub fn new(keyboard: Arc<DataKeys>) -> Self {
         Self {
-            regs: Registers::new(keyboard.clone()),
+            regs: Registers::new(),
             mem: Default::default(),
             disp: Default::default(),
             to_draw: Default::default(),
@@ -372,6 +372,7 @@ impl Interpreter {
             self.regs.set_pc(self.regs.get_pc() - 2);
             return;
         }
+        self.keyboard.reset_new_pressed_flag();
         let key = convert_key_to_value(self.keyboard._last_key().unwrap());
         if key.is_none() {
             return;
