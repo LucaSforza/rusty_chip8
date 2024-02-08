@@ -1,7 +1,9 @@
 use core::fmt;
-use std::sync::{Arc, Mutex};
+use std::{cell::Cell, sync::{Arc, Mutex}};
 
 use minifb::{InputCallback, Key};
+
+use crate::interpreter::convert_key_to_value;
 
 pub const ONEHERTZ: f64 = 1.0/60.0;
 
@@ -10,6 +12,7 @@ pub struct DataKeys {
     last_key_pressed: Mutex<Option<Key>>,
     new_pressed: Arc<Mutex<bool>>,
     i: Mutex<usize>,
+    waiting: Cell<bool>, //TODO: continuare da qua
 }
 
 impl DataKeys {
@@ -20,6 +23,7 @@ impl DataKeys {
             last_key_pressed: Mutex::new(None),
             new_pressed: new_pressed,
             i: 0.into(),
+            waiting: false.into(),
         }
     }
 
@@ -42,7 +46,7 @@ impl DataKeys {
 
     fn push(&self, key: Key) {
         let mut buf = self.buf.lock().unwrap();
-        *self.new_pressed.lock().unwrap() = true;
+
         if buf.iter().all(|k| *k != key) {
             buf.push(key);
         }
@@ -52,6 +56,9 @@ impl DataKeys {
         let mut i = self.i.lock().unwrap();
         *i += 1;
         let mut buf = self.buf.lock().unwrap();
+        if self.waiting.get() {
+            *self.new_pressed.lock().unwrap() = true;
+        }
         if let Some(index) = buf.iter().position(|x| *x == key) {
             buf.remove(index);
         }
@@ -59,7 +66,15 @@ impl DataKeys {
 
     fn set_new_key(&self, key: Key) {
         *self.last_key_pressed.lock().unwrap() = Some(key)
-    } 
+    }
+
+    pub fn start_waiting(&self) {
+        self.waiting.set(true)
+    }
+
+    pub fn stop_waiting(&self) {
+        self.waiting.set(false)
+    }
 }
 
 impl fmt::Debug for DataKeys {
@@ -85,6 +100,9 @@ impl InputCallback for KeyboardState {
     fn add_char(&mut self, _uni_char: u32) { }
 
     fn set_key_state(&mut self, key: Key, state: bool) {
+        if convert_key_to_value(key).is_none() {
+            return;
+        }
         match state {
             true => {
                 if !self.keys_pressed.key_pressed(key) {

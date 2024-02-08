@@ -368,10 +368,13 @@ impl Interpreter {
     }
 
     fn wait_key_pressed(&mut self,istro: Istruction) {
-        if !self.keyboard.new_press() {
+        self.keyboard.start_waiting();
+        let new_press = self.keyboard.new_press();
+        if !new_press {
             self.regs.set_pc(self.regs.get_pc() - 2);
             return;
         }
+        self.keyboard.stop_waiting();
         self.keyboard.reset_new_pressed_flag();
         let key = convert_key_to_value(self.keyboard._last_key().unwrap());
         if key.is_none() {

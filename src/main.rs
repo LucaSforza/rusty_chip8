@@ -4,6 +4,7 @@ mod interpreter;
 mod memory;
 mod registers;
 
+use std::env::Args;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -18,17 +19,61 @@ use rodio::{OutputStream, Sink};
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 320;
-const FRAME4FRAME: usize = 50;
+
+fn usage(program_name: &str) {
+    eprintln!("[INFO] {program_name} <path> args...");
+    eprintln!("[INFO] Avaliable args:");
+    eprintln!("[INFO]     --speed <cycles per frame>")
+}
+
+struct Config {
+    _program_name: String,
+    speed: usize,
+    path: String,
+}
+
+impl Config {
+    fn new(mut args: Args) -> Self {
+        let program_name = args.next().unwrap();
+        let path = args.next().unwrap_or_else(|| {
+            eprintln!("[ERROR] no path provided");
+            usage(program_name.as_str());
+            exit(1);
+        });
+        let mut speed = 100;
+       while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--speed" => {
+                    speed = {
+                        let cycles = args.next().unwrap_or_else(|| {
+                            eprintln!("[ERROR] Cycles for frame is missing");
+                            usage(program_name.as_str());
+                            exit(1);
+                        });
+                        usize::from_str_radix(&cycles, 10).unwrap_or_else(|_| {
+                            eprintln!("[ERROR] passed in arguments {cycles} that is not a positive integer");
+                            usage(program_name.as_str());
+                            exit(1);
+                        })
+                    }
+                }
+                other => {
+                    eprint!("[ERROR] Unknown arg: {other}")
+
+                }
+            }
+        }
+        Self {
+            speed: speed,
+            _program_name: program_name,
+            path: path,
+        }
+    }
+}
 
 fn main() {
-    let mut args = env::args();
-    let program = args.next().unwrap();
-    let path = args.next().unwrap_or_else(|| {
-        eprintln!("[ERROR] no path provided");
-        eprintln!("[ERROR] Usage: {program} <path>");
-        std::process::exit(1);
-    });
-    let path = Path::new(&path);
+    let configuration = Config::new(env::args());
+    let path = Path::new(&configuration.path);
     if !path.exists() {
         eprintln!("[ERROR] file '{}' not found", path.to_str().unwrap());
         std::process::exit(2);
@@ -86,7 +131,7 @@ fn main() {
         }
 
 
-        if cycles_count == FRAME4FRAME {
+        if cycles_count == configuration.speed {
             if interpreter.to_draw() {
                 interpreter.draw(&mut buffer);
                 window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();

@@ -10,7 +10,7 @@ Inspired by [Octo](https://github.com/JohnEarnest/Octo).
 Third-party games:
 
 - [Glitch Ghost](https://github.com/jackiekircher/glitch-ghost) by Jackie Kircher.
-- source code of Chip War, Cave Explorer, Default, Fez can be found [here](https://github.com/JohnEarnest/Octo/tree/gh-pages/examples) 
+- source code of Slippery, Chip War, Cave Explorer, Default, Fez can be found [here](https://github.com/JohnEarnest/Octo/tree/gh-pages/examples) 
 
 
 ## Run Locally
@@ -38,3 +38,7 @@ Run the emulator
 ```bash
   cargo run <path to a bytecode file>
 ```
+
+## TODO
+
+- Bug in chipwar.ch8 the game behaves unexpectedly (conquering a region often ends it)
