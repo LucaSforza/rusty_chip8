@@ -7,12 +7,12 @@ mod registers;
 use std::env::Args;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use std::{env, fs::File, path::Path};
 
 use crate::interpreter::Interpreter;
 
-use keyboard::{DataKeys, KeyboardState};
+use keyboard::{DataKeys, KeyboardState, ONEHERTZ};
 use minifb::{Key, Window, WindowOptions};
 use rodio::source::{SineWave, Source};
 use rodio::{OutputStream, Sink};
@@ -30,6 +30,7 @@ struct Config {
     _program_name: String,
     speed: usize,
     path: String,
+    fps: u32,
 }
 
 impl Config {
@@ -41,9 +42,10 @@ impl Config {
             exit(1);
         });
         let mut speed = 100;
+        let mut fps = 60;
        while let Some(arg) = args.next() {
             match arg.as_str() {
-                "--speed" => {
+                "--speed" | "-s" => {
                     speed = {
                         let cycles = args.next().unwrap_or_else(|| {
                             eprintln!("[ERROR] Cycles for frame is missing");
@@ -57,6 +59,20 @@ impl Config {
                         })
                     }
                 }
+                "--fps" | "-f" => {
+                    fps = {
+                        let cycles = args.next().unwrap_or_else(|| {
+                            eprintln!("[ERROR] frame per second is missing");
+                            usage(program_name.as_str());
+                            exit(1);
+                        });
+                        u32::from_str_radix(&cycles, 10).unwrap_or_else(|_| {
+                            eprintln!("[ERROR] passed in arguments {cycles} that is not a positive integer");
+                            usage(program_name.as_str());
+                            exit(1);
+                        })
+                    }
+                }
                 other => {
                     eprint!("[ERROR] Unknown arg: {other}")
 
@@ -64,6 +80,7 @@ impl Config {
             }
         }
         Self {
+            fps: fps,
             speed: speed,
             _program_name: program_name,
             path: path,
@@ -118,6 +135,8 @@ fn main() {
 
     let mut fps = 0;
     let mut last_time = SystemTime::now();
+
+    window.limit_update_rate(Some(Duration::from_secs_f64((60.0/f64::from(configuration.fps))*ONEHERTZ)));
 
     //While loop for when the window is open and the escape key is not pressed
     while window.is_open() && !window.is_key_down(Key::Escape) {
