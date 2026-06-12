@@ -77,15 +77,28 @@ Example ROMs in `examples/`. Run with `--speed 1000` for responsive gameplay (ti
 
 ### caveexplorer.ch8
 
-Cave exploration game. Grid-based map with rooms. Walkable areas are white (`█` in ASCII art), walls are black (spaces). Player is a 2x2 pixel block.
+Cave exploration / block-pushing puzzle game by David S. Moore.
+Overworld with 16 boards (0x0-0xF), each 16x8 tiles (4x4 pixels).
+Player sprite (MAN) is `0x00 0x60 0x60 0x00` = 2x2 pixel block at bitmap offset.
 
-**Controls** (CHIP-8 hex key → physical key):
-- `0x5` → W = up
-- `0x7` → A = left
-- `0x9` → D = right
-- `0x8` → S = down
+**Controls** (overworld):
+- `0x5` → W = north (many-=1)
+- `0x7` → A = west  (manx-=1)
+- `0x9` → D = east  (manx+=1)
+- `0x8` → S = south (many+=1)
 
-**Play via MCP**: Single `key_press_and_release(key)` per move. Game processes immediately. Use `key_tap_and_get_diff(key)` to see pixel changes after each key tap.
+**Board transitions**: At map edges, press direction to wrap & change board.
+Transition tables: board-n[board]=board, board-e[b], board-s[b], board-w[b].
+
+**Block puzzle mode**: Entered via special tiles. A/D move, E pick up/drop block, Q reset.
+
+**Player detection** (registers):
+- `Vc(V12)` = manx (tile X 0-15), `Vb(V11)` = many (tile Y 0-7), `Vd(V13)` = boardno
+- Script: `screen_script(path="scripts_games/caveexplorer/detect_walls.py")`
+
+**Board data**: 16 bytes per board, one per column. Bit=1 = path (walkable).
+
+**Play via MCP**: Single `key_press_and_release(key)` per move. Use `key_tap_and_get_diff` for pixel diff. Use `screen_script` for analysis.
 
 ### fez.ch8
 
