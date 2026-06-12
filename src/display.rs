@@ -9,6 +9,10 @@ pub struct Display {
     buf: Vec<Vec<bool>>,
 }
 impl Display {
+    pub fn buf(&self) -> Vec<Vec<bool>> {
+        self.buf.clone()
+    }
+
     pub fn clear_display(&mut self) {
         self.buf.iter_mut().flatten().for_each(|val| *val = false)
     }

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "chip8-debug": {
+      "command": "cargo",
+      "args": ["run", "-p", "chip8-mcp"],
+      "env": {
+        "CHIP8_DEBUG_PORT": "9876"
+      }
+    }
+  }
+}

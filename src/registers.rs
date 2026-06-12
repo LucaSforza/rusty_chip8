@@ -55,6 +55,14 @@ impl Registers {
         }
     }
 
+    pub fn all_v(&self) -> [u8; 16] {
+        self.v
+    }
+
+    pub fn stack_snapshot(&self) -> Vec<u16> {
+        self.stack.clone()
+    }
+
     pub fn get_v(&self, v_reg: usize) -> u8 {
         self.v[v_reg]
     }

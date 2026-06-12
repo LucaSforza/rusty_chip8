@@ -3,11 +3,13 @@ use std::fs::File;
 use std::io::Read;
 use std::process::exit;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use minifb::Key;
 use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng};
 
+use crate::debugger::Debugger;
 use crate::display::{Display, Sprite};
 use crate::keyboard::DataKeys;
 use crate::memory::Memory;
@@ -94,10 +96,11 @@ pub struct Interpreter {
     to_draw: bool,
     keyboard: Arc<DataKeys>,
     r_thread: ThreadRng,
+    debugger: Option<Arc<Debugger>>,
 }
 impl Interpreter {
 
-    pub fn new(keyboard: Arc<DataKeys>) -> Self {
+    pub fn new(keyboard: Arc<DataKeys>, debugger: Option<Arc<Debugger>>) -> Self {
         Self {
             regs: Registers::new(),
             mem: Default::default(),
@@ -105,6 +108,7 @@ impl Interpreter {
             to_draw: Default::default(),
             keyboard: keyboard,
             r_thread: thread_rng(),
+            debugger,
         }
     }
 
@@ -384,10 +388,19 @@ impl Interpreter {
     }
 
     pub fn next_istr(&mut self) {
-        // Fetch instruction        
+        if let Some(ref debugger) = self.debugger {
+            if debugger.paused.load(Ordering::Relaxed)
+                && !debugger.step_requested.swap(false, Ordering::Relaxed)
+            {
+                debugger.update_state(&self.disp, &self.regs, &self.mem);
+                return;
+            }
+        }
+
+        // Fetch instruction
         let istro = Istruction::new(self.mem.read_16bit(self.regs.get_pc()));
         self.regs.increment_pc();
-    
+
         // Decode and execute
         match istro.opcode {
             0x0 => match istro.func_code {
@@ -453,5 +466,14 @@ impl Interpreter {
                 exit(1);
             },
         };
+
+        if let Some(ref debugger) = self.debugger {
+            debugger.update_state(&self.disp, &self.regs, &self.mem);
+            if debugger.breakpoints.lock().unwrap().contains(&self.regs.get_pc())
+                || debugger.step_requested.swap(false, Ordering::Relaxed)
+            {
+                debugger.paused.store(true, Ordering::Relaxed);
+            }
+        }
     }
 }

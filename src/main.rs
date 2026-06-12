@@ -1,3 +1,4 @@
+mod debugger;
 mod display;
 mod keyboard;
 mod interpreter;
@@ -11,6 +12,7 @@ use std::fs::File;
 use std::path::Path;
 
 use clap::Parser;
+use crate::debugger::Debugger;
 use crate::interpreter::Interpreter;
 
 use keyboard::{DataKeys, KeyboardState, ONEHERTZ};
@@ -34,6 +36,14 @@ struct Config {
     /// Target frames per second
     #[arg(short = 'f', long = "fps", default_value = "60")]
     fps: u32,
+
+    /// Enable debug server (TCP)
+    #[arg(long = "debug", default_value = "true", default_missing_value = "true", num_args = 0..=1, require_equals = false, action = clap::ArgAction::Set)]
+    debug: bool,
+
+    /// Debug server port
+    #[arg(long = "debug-port", default_value = "9876")]
+    debug_port: u16,
 }
 
 fn main() {
@@ -74,7 +84,15 @@ fn main() {
     let data_keys = Arc::new(DataKeys::new(new_key_press.clone()));
     let keyboard = KeyboardState::new(data_keys.clone());
 
-    let mut interpreter = Interpreter::new(data_keys);
+    let debugger = if configuration.debug {
+        let d = Arc::new(Debugger::new());
+        d.spawn_listener(configuration.debug_port);
+        Some(d)
+    } else {
+        None
+    };
+
+    let mut interpreter = Interpreter::new(data_keys, debugger.clone());
     window.set_input_callback(keyboard);
 
     interpreter.write_rom_on_mem(file);
@@ -88,6 +106,14 @@ fn main() {
 
     //While loop for when the window is open and the escape key is not pressed
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        let running = debugger
+            .as_ref()
+            .map(|d| d.running.load(std::sync::atomic::Ordering::Relaxed))
+            .unwrap_or(true);
+        if !running {
+            break;
+        }
+
         cycles_count += 1;
         interpreter.next_istr();
 
