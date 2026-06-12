@@ -45,7 +45,7 @@ cargo run -p chip8-mcp
 Tools: `get_screen`, `get_registers`, `get_memory`, `set_breakpoint`,
 `clear_breakpoint`, `step`, `pause`, `continue`, `stop`, `get_state`,
 `key_press`, `key_release`, `key_press_and_release`,
-`screen_script`.
+`key_tap_and_get_screen(key, path?)`, `key_tap_and_get_diff`, `screen_script`.
 
 ## Architecture
 
@@ -79,26 +79,25 @@ Example ROMs in `examples/`. Run with `--speed 1000` for responsive gameplay (ti
 
 Cave exploration / block-pushing puzzle game by David S. Moore.
 Overworld with 16 boards (0x0-0xF), each 16x8 tiles (4x4 pixels).
-Player sprite (MAN) is `0x00 0x60 0x60 0x00` = 2x2 pixel block at bitmap offset.
+Player sprite (MAN) = `0x00 0x60 0x60 0x00` = 2x2 block at sprite offset (1,1).
 
 **Controls** (overworld):
-- `0x5` → W = north (many-=1)
-- `0x7` → A = west  (manx-=1)
-- `0x9` → D = east  (manx+=1)
-- `0x8` → S = south (many+=1)
+- `0x5` → W = north, `0x7` → A = west, `0x9` → D = east, `0x8` → S = south
+- At board edges, direction wraps and may change board.
+- EDGE direction shown by detect_walls.py as board transition.
 
-**Board transitions**: At map edges, press direction to wrap & change board.
-Transition tables: board-n[board]=board, board-e[b], board-s[b], board-w[b].
+**Special tiles** (from game source at ROM 0xB01-0xB21):
+- Events: 16 (x,y) coords. Stepping on tile triggers scripted scene.
+- Secret wall: board 0x6 column 7 — rows 2-7 passable after rumble event.
+- Gates: board 0x4 columns 8-12 — path is always walkable, gate sprite is cosmetic.
 
-**Block puzzle mode**: Entered via special tiles. A/D move, E pick up/drop block, Q reset.
+**Block puzzle mode**: Entered via event tiles. A/D=move, E=pick up/drop, Q=reset.
 
-**Player detection** (registers):
-- `Vc(V12)` = manx (tile X 0-15), `Vb(V11)` = many (tile Y 0-7), `Vd(V13)` = boardno
-- Script: `screen_script(path="scripts_games/caveexplorer/detect_walls.py")`
+**Player detection**: Vc=V12=manx, Vb=V11=manx, Vd=V13=boardno.
+- `screen_script(path="scripts_games/caveexplorer/detect_walls.py")` — walls + special notes
+- `screen_script(path="scripts_games/caveexplorer/board_map.py")` — full 16x8 tile map
 
-**Board data**: 16 bytes per board, one per column. Bit=1 = path (walkable).
-
-**Play via MCP**: Single `key_press_and_release(key)` per move. Use `key_tap_and_get_diff` for pixel diff. Use `screen_script` for analysis.
+**Play via MCP**: Use `key_tap_and_get_screen(key, repeat=N, path=...)` for moves. `repeat=5` presses same key N times in one call — prefer over calling tool repeatedly. `path="scripts/foo.py"` runs script on resulting state. No path = full state JSON. `key_tap_and_get_diff(key)` for pixel diff of a single press.
 
 ### fez.ch8
 

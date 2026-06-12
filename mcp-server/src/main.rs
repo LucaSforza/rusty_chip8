@@ -34,6 +34,21 @@ struct KeyParam {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+struct KeyTapParam {
+    /// Hex key value (0x0-0xF). CHIP-8 hex keyboard layout:
+    /// 1 2 3 C, 4 5 6 D, 7 8 9 E, A 0 B F
+    key: u8,
+    /// Optional path to Python script. If provided, script receives full state
+    /// as JSON on stdin. If omitted, full emulator state is returned as JSON.
+    path: Option<String>,
+    /// Number of times to press the key (1-10, default 1).
+    #[serde(default = "one")]
+    repeat: u8,
+}
+
+fn one() -> u8 { 1 }
+
+#[derive(Debug, Deserialize, JsonSchema)]
 struct ScriptParam {
     /// Path to Python script file. Script receives screen pixels + regs
     /// as JSON on stdin. Store reusable scripts in /tmp and pass path.
@@ -360,28 +375,98 @@ impl Chip8Debug {
     }
 
     #[tool(
-        description = "Press and release a CHIP-8 hex key (0x0-0xF) with a delay, then return the screen state. Use this to press a key and see the result."
+        description = "Press and release a CHIP-8 hex key (0x0-0xF) with a delay, optionally repeating, then run a script or return full state JSON."
     )]
     async fn key_tap_and_get_screen(
         &self,
-        Parameters(KeyParam { key }): Parameters<KeyParam>,
+        Parameters(KeyTapParam { key, path, repeat }): Parameters<KeyTapParam>,
     ) -> Result<CallToolResult, McpError> {
         if key > 0x0F {
             return Err(McpError::invalid_params("key must be 0x0-0xF", None));
         }
-        self.send_cmd(json!({"cmd": "key_press", "key": key}))
-            .await?;
-        tokio::time::sleep(Duration::from_millis(200)).await;
-        self.send_cmd(json!({"cmd": "key_release", "key": key}))
-            .await?;
+        let n = repeat.clamp(1, 10);
+        for _ in 0..n {
+            self.send_cmd(json!({"cmd": "key_press", "key": key}))
+                .await?;
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            self.send_cmd(json!({"cmd": "key_release", "key": key}))
+                .await?;
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
 
-        let resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
+        let resp = self.send_cmd(json!({"cmd": "get_state"})).await?;
         let pixels: Vec<Vec<bool>> =
             serde_json::from_value(resp["pixels"].clone()).unwrap_or_default();
-        let screen = Chip8Debug::render_screen(&pixels);
-        Ok(CallToolResult::success(vec![Content::text(format!(
-            "Key 0x{key:X} pressed and released\n\n```\n{screen}\n```"
-        ))]))
+        let v: [u8; 16] = serde_json::from_value(resp["v"].clone()).unwrap_or([0; 16]);
+        let i = resp["i"].as_u64().unwrap_or(0) as u16;
+        let pc = resp["pc"].as_u64().unwrap_or(0) as u16;
+        let stack: Vec<u16> = serde_json::from_value(resp["stack"].clone()).unwrap_or_default();
+        let dt = resp["dt"].as_u64().unwrap_or(0) as u8;
+        let st = resp["st"].as_u64().unwrap_or(0) as u8;
+
+        let mut result = format!("Key 0x{key:X} pressed x{n}\n");
+
+        if let Some(script_path) = path {
+            let script = std::fs::read_to_string(&script_path)
+                .map_err(|e| McpError::internal_error(format!("read script {script_path}: {e}"), None))?;
+
+            let input = serde_json::json!({
+                "pixels": pixels,
+                "v_regs": v,
+                "pc": pc,
+                "i": i,
+                "delay": dt,
+                "sound": st,
+            });
+
+            let mut child = std::process::Command::new("python3")
+                .arg("-c")
+                .arg(&script)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| McpError::internal_error(format!("python3 spawn failed: {e}"), None))?;
+
+            use std::io::Write;
+            if let Some(mut stdin) = child.stdin.take() {
+                let input_str = serde_json::to_string(&input)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                stdin.write_all(input_str.as_bytes())
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            }
+
+            let output = child.wait_with_output()
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+            if !output.stdout.is_empty() {
+                result.push_str(&String::from_utf8_lossy(&output.stdout));
+            }
+            if !output.stderr.is_empty() {
+                result.push_str("\n--- stderr ---\n");
+                result.push_str(&String::from_utf8_lossy(&output.stderr));
+            }
+            if !output.status.success() {
+                result.insert_str(0, &format!("[exit code {}]\n", output.status.code().unwrap_or(-1)));
+            }
+
+            Ok(CallToolResult::success(vec![Content::text(result)]))
+        } else {
+            let state_json = serde_json::json!({
+                "pixels": pixels,
+                "v_regs": v,
+                "pc": pc,
+                "i": i,
+                "stack": stack,
+                "delay": dt,
+                "sound": st,
+            });
+            let formatted = serde_json::to_string_pretty(&state_json)
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            Ok(CallToolResult::success(vec![Content::text(format!(
+                "Key 0x{key:X} pressed and released\n\n```json\n{formatted}\n```"
+            ))]))
+        }
     }
 
     #[tool(

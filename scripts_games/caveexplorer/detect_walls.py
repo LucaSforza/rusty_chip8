@@ -1,39 +1,54 @@
 #!/usr/bin/env python3
-"""Check which directions are walkable from the player position."""
-import sys, json
+"""Detect overworld player from registers (Vc=manx, Vb=many) and check walls.
+Also detects special walls: gates, secret walls, event tiles."""
+import json, sys
 
 data = json.load(sys.stdin)
 p = data["pixels"]
+v = data.get("v_regs", [0]*16)
 
-# Find player
-player = None
-for y in range(31):
-    for x in range(63):
-        if not (p[y][x] and p[y][x+1] and p[y+1][x] and p[y+1][x+1]):
-            continue
-        extra = sum(1 for dy in range(-1,3) for dx in range(-1,3)
-                    if 0 <= x+dx < 64 and 0 <= y+dy < 32
-                    and not (0 <= dx <= 1 and 0 <= dy <= 1)
-                    and p[y+dy][x+dx])
-        if player is None or extra < player[2]:
-            player = (x, y, extra)
-if player is None:
-    print("Player not found"); sys.exit(1)
+manx = v[12] & 0x0F
+many = v[11] & 0x07
+boardno = v[13] & 0x0F
 
-px, py, _ = player
-print(f"Player at ({px},{py})")
+print(f"Board {boardno:#x} Player tile ({manx}, {many})")
 
-# Check 4 directions: is there walkable path beyond the 2x2 block?
-checks = [
-    ("up",    px,   py-1, px,   py-2),
-    ("down",  px,   py+2, px,   py+3),
-    ("left",  px-1, py,   px-2, py),
-    ("right", px+2, py,   px+3, py),
-]
-for name, x1, y1, x2, y2 in checks:
-    if name in ("up", "down"):
-        ok = (0 <= x1 < 63 and 0 <= y1 < 32 and p[y1][x1] and p[y1][x1+1])
+def tile_walkable(tx, ty):
+    if not (0 <= tx < 16 and 0 <= ty < 8):
+        return False
+    px, py = tx * 4, ty * 4
+    on = sum(1 for y in range(py, py+4) for x in range(px, px+4) if 0 <= x < 64 and 0 <= y < 32 and p[y][x])
+    return on >= 6
+
+edges = {"north": many == 0, "south": many == 7, "west": manx == 0, "east": manx == 15}
+for name, dx, dy in [("north", 0, -1), ("south", 0, 1), ("west", -1, 0), ("east", 1, 0)]:
+    if edges[name]:
+        print(f"  {name}: EDGE (board transition)")
     else:
-        ok = (0 <= x1 < 64 and 0 <= y1 < 31 and p[y1][x1] and p[y1+1][x1])
-    label = "FREE" if ok else "WALL"
-    print(f"  {name}: {label}")
+        free = tile_walkable(manx + dx, many + dy)
+        print(f"  {name}: {'FREE' if free else 'WALL'}")
+
+# Special wall detection
+notes = []
+
+# Secret wall: board 6, column 7, rows 2-7 become walkable after rumble event
+if boardno == 6 and manx == 7:
+    notes.append("Secret wall: rows 2-7 may open here after rumble event")
+
+# Gates: board 4, columns 8-12 have gate sprites (path underneath always walkable)
+if boardno == 4 and 8 <= manx <= 12:
+    notes.append("Gate area: path beneath gate is already walkable")
+
+# Special positions (from game source code)
+special_pos = [
+    (3,6),(7,4),(14,6),(7,4),(3,3),(12,4),(7,5),(7,4),
+    (7,6),(9,4),(10,4),(11,3),(5,3),(5,3),(5,3),(5,3),
+]
+sp = special_pos[boardno] if boardno < len(special_pos) else None
+if sp and manx == sp[0] and many == sp[1]:
+    notes.append("Event tile: interacting here triggers a special event")
+
+if notes:
+    print("\nNotes:")
+    for n in notes:
+        print(f"  {n}")
