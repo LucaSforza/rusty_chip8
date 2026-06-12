@@ -10,15 +10,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run
 
 ```bash
-cargo build                    # debug build (workspace)
-cargo build --release          # release build
-cargo run <path_to_rom>        # run emulator
+cargo build                         # debug build (workspace)
+cargo run <path_to_rom>             # run emulator
 cargo run <path> -- --speed 10 --fps 60  # with options
-cargo run -p chip8-mcp         # run MCP debug server (connects to emulator)
+cargo run -p chip8-mcp              # MCP debug server (connects to emulator)
+cargo run -p chip8-asm -- input.asm -o rom.ch8  # assemble ROM
 ```
 
-Args: `--speed/-s <cycles per frame>` (default 100), `--fps/-f <target fps>` (default 60),
+Args (emulator): `--speed/-s <cycles per frame>` (default 100), `--fps/-f <target fps>` (default 60),
 `--debug` (default true, TCP debug server), `--debug-port` (default 9876).
+
+Args (assembler): `input.asm`, `-o <output.ch8>` (default `a.out.ch8`), `-l <listing.txt>`.
 
 ### Test ROMs
 
@@ -115,9 +117,23 @@ Puzzle/platformer. Controls TBD.
 
 ```text
 rusty_chip8/         # emulator binary (crate root)
-mcp-server/          # chip8-mcp crate — MCP stdio server using rmcp
-  └── src/main.rs    # tools: get_screen, get_registers, get_memory, breakpoints, step, pause, continue, stop, get_state, key_press, key_release, key_press_and_release
-.mcp.json  # MCP server config for Claude Code (spawns `cargo run -p chip8-mcp`)
+mcp-server/          # chip8-mcp crate — MCP stdio server
+  └── src/main.rs    # debug tools (get_screen, get_registers, step, breakpoints, etc.)
+chip8-asm/           # assembler binary crate
+  └── src/
+      ├── main.rs    # CLI, two-pass assembly
+      ├── lexer.rs   # tokenizer
+      ├── parser.rs  # instruction/directive parser
+      ├── encoder.rs # all 35 opcodes → [u8; 2]
+      └── symbol.rs  # label + constant table
+.mcp.json  # MCP server config for Claude Code
 ```
 
 MCP server communicates with emulator via TCP localhost (JSON lines protocol, port 9876 by default).
+
+### Assembler language
+
+Syntax: `;`/`#` comments, `label:` labels, `V0`-`VF`/`I`/`DT`/`ST` registers, `#$FF`/`$FF`/`0xFF` immediates.
+Directives: `.org`, `.byte`, `.word`, `.ascii`, `.asciz`, `.align`, `.space`, `.const`.
+All 35 standard instructions. Two-pass assembly for forward label references.
+`.const` values usable as immediate operands (e.g., `LD V0, MY_CONST`).
