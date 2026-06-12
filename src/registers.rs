@@ -34,7 +34,7 @@ impl Registers {
                     let val = (difference.as_millis() / 16) as u8;
                     let s = *sound;
                     if s != 0 {
-                        *sound -= s.checked_sub(val).unwrap_or(0);
+                        *sound = s.checked_sub(val).unwrap_or(0);
                     }
                     let d = *delay;
                     if d != 0 {
