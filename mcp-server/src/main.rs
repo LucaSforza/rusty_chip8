@@ -35,9 +35,9 @@ struct KeyParam {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ScriptParam {
-    /// Python script to run. Receives screen pixels as JSON on stdin,
-    /// outputs analysis to stdout. Script has 5 seconds timeout.
-    script: String,
+    /// Path to Python script file. Script receives screen pixels + regs
+    /// as JSON on stdin. Store reusable scripts in /tmp and pass path.
+    path: String,
 }
 
 // ----- MCP server state -----
@@ -437,12 +437,15 @@ impl Chip8Debug {
     }
 
     #[tool(
-        description = "Run a Python script to analyze the current screen. Screen pixels (64x32 bool array) passed as JSON stdin. Script output returned."
+        description = "Run a Python script file to analyze the current screen. Screen pixels (64x32 bool array) + regs passed as JSON stdin. Script path: /tmp/foo.py or wherever you save it."
     )]
     async fn screen_script(
         &self,
-        Parameters(ScriptParam { script }): Parameters<ScriptParam>,
+        Parameters(ScriptParam { path }): Parameters<ScriptParam>,
     ) -> Result<CallToolResult, McpError> {
+        let script = std::fs::read_to_string(&path)
+            .map_err(|e| McpError::internal_error(format!("read script {path}: {e}"), None))?;
+
         let resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
         let pixels: Vec<Vec<bool>> =
             serde_json::from_value(resp["pixels"].clone()).unwrap_or_default();
