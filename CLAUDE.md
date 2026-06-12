@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Commit rules
+
+- Write all commit messages in English
+- Use conventional commits style (feat:, fix:, refactor:, chore:, docs:)
+
 ## Build & Run
 
 ```bash

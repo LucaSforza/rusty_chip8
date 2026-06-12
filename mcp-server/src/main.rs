@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::*;
 use rmcp::transport::stdio;
@@ -8,7 +6,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::Mutex;
+
+const ERR_MSG: &str = "Emulatore non in esecuzione. Avvia con: `cargo run -- <path_to_rom>`";
 
 // ----- input structs for tools with parameters -----
 
@@ -30,33 +29,30 @@ struct AddressParam {
 
 #[derive(Clone)]
 struct Chip8Debug {
-    stream: Arc<Mutex<tokio::net::TcpStream>>,
+    port: u16,
 }
 
 impl Chip8Debug {
-    async fn new(port: u16) -> Result<Self, anyhow::Error> {
-        let stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await?;
-        Ok(Self {
-            stream: Arc::new(Mutex::new(stream)),
-        })
-    }
-
+    /// Opens fresh TCP connection per call. On failure returns McpError.
     async fn send_cmd(&self, cmd: serde_json::Value) -> Result<serde_json::Value, McpError> {
-        let mut stream = self.stream.lock().await;
+        let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", self.port))
+            .await
+            .map_err(|_| McpError::internal_error(ERR_MSG, None))?;
+
         let mut line = serde_json::to_string(&cmd)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         line.push('\n');
         stream
             .write_all(line.as_bytes())
             .await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            .map_err(|_| McpError::internal_error(ERR_MSG, None))?;
 
-        let mut reader = BufReader::new(&mut *stream);
+        let mut reader = BufReader::new(&mut stream);
         let mut resp = String::new();
         reader
             .read_line(&mut resp)
             .await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            .map_err(|_| McpError::internal_error(ERR_MSG, None))?;
 
         serde_json::from_str(resp.trim())
             .map_err(|e| McpError::internal_error(e.to_string(), None))
@@ -209,7 +205,7 @@ impl Chip8Debug {
     }
 
     #[tool(description = "Resume emulator execution")]
-    async fn r#continue(&self) -> Result<CallToolResult, McpError> {
+    async fn resume(&self) -> Result<CallToolResult, McpError> {
         self.send_cmd(json!({"cmd": "continue"})).await?;
         Ok(CallToolResult::success(vec![Content::text("Continued")]))
     }
@@ -277,10 +273,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(9876);
 
-    tracing::info!("connecting to emulator on 127.0.0.1:{port}");
-    let server = Chip8Debug::new(port).await?;
-    tracing::info!("connected, starting MCP server");
-
+    let server = Chip8Debug { port };
     server.serve(stdio()).await?.waiting().await?;
 
     Ok(())
