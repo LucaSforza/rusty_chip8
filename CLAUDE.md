@@ -70,6 +70,34 @@ Tools: `get_screen`, `get_registers`, `get_memory`, `set_breakpoint`,
 - FPS display printed to stdout once per second
 - Debugger TCP thread accepts one connection at a time, processes JSON commands, returns JSON responses
 
+## Game ROMs
+
+Example ROMs in `examples/`. Run with `--speed 1000` for responsive gameplay (timer fix needed).
+
+### caveexplorer.ch8
+
+Cave exploration game. Grid-based map with rooms. Walkable areas are white (`█` in ASCII art), walls are black (spaces). Player is a 2x2 pixel block.
+
+**Controls** (CHIP-8 hex key → physical key):
+- `0x5` → W = up
+- `0x7` → A = left
+- `0x9` → D = right
+- `0x8` → S = down
+
+**Play via MCP**: Single `key_press_and_release(key)` per move. Game processes immediately. Use `key_tap_and_get_diff(key)` to see pixel changes after each key tap.
+
+### fez.ch8
+
+World-rotation puzzle (FEZ clone). Keys rotate perspective:
+- `0x7` (A) / `0x4` (Q) = rotate left
+- `0x9` (D) / `0x6` (E) = rotate right
+- `0x5` (W) = up/rotate
+- `0x8` (S) = down/rotate
+
+### slippery.ch8
+
+Puzzle/platformer. Controls TBD.
+
 ## Workspace
 
 ```text
