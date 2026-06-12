@@ -4,12 +4,13 @@ mod interpreter;
 mod memory;
 mod registers;
 
-use std::env::Args;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use std::{env, fs::File, path::Path};
+use std::fs::File;
+use std::path::Path;
 
+use clap::Parser;
 use crate::interpreter::Interpreter;
 
 use keyboard::{DataKeys, KeyboardState, ONEHERTZ};
@@ -20,76 +21,23 @@ use rodio::{OutputStream, Sink};
 const WIDTH: usize = 640;
 const HEIGHT: usize = 320;
 
-fn usage(program_name: &str) {
-    eprintln!("[INFO] {program_name} <path> args...");
-    eprintln!("[INFO] Avaliable args:");
-    eprintln!("[INFO]     --speed <cycles per frame>")
-}
-
+#[derive(Parser)]
+#[command(version, about = "CHIP-8 interpreter in Rust")]
 struct Config {
-    _program_name: String,
-    speed: usize,
+    /// Path to CHIP-8 ROM file
     path: String,
+
+    /// Cycles per frame
+    #[arg(short = 's', long = "speed", default_value = "100")]
+    speed: usize,
+
+    /// Target frames per second
+    #[arg(short = 'f', long = "fps", default_value = "60")]
     fps: u32,
 }
 
-impl Config {
-    fn new(mut args: Args) -> Self {
-        let program_name = args.next().unwrap();
-        let path = args.next().unwrap_or_else(|| {
-            eprintln!("[ERROR] no path provided");
-            usage(program_name.as_str());
-            exit(1);
-        });
-        let mut speed = 100;
-        let mut fps = 60;
-       while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--speed" | "-s" => {
-                    speed = {
-                        let cycles = args.next().unwrap_or_else(|| {
-                            eprintln!("[ERROR] Cycles for frame is missing");
-                            usage(program_name.as_str());
-                            exit(1);
-                        });
-                        usize::from_str_radix(&cycles, 10).unwrap_or_else(|_| {
-                            eprintln!("[ERROR] passed in arguments {cycles} that is not a positive integer");
-                            usage(program_name.as_str());
-                            exit(1);
-                        })
-                    }
-                }
-                "--fps" | "-f" => {
-                    fps = {
-                        let cycles = args.next().unwrap_or_else(|| {
-                            eprintln!("[ERROR] frame per second is missing");
-                            usage(program_name.as_str());
-                            exit(1);
-                        });
-                        u32::from_str_radix(&cycles, 10).unwrap_or_else(|_| {
-                            eprintln!("[ERROR] passed in arguments {cycles} that is not a positive integer");
-                            usage(program_name.as_str());
-                            exit(1);
-                        })
-                    }
-                }
-                other => {
-                    eprint!("[ERROR] Unknown arg: {other}")
-
-                }
-            }
-        }
-        Self {
-            fps: fps,
-            speed: speed,
-            _program_name: program_name,
-            path: path,
-        }
-    }
-}
-
 fn main() {
-    let configuration = Config::new(env::args());
+    let configuration = Config::parse();
     let path = Path::new(&configuration.path);
     if !path.exists() {
         eprintln!("[ERROR] file '{}' not found", path.to_str().unwrap());
