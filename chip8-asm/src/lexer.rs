@@ -74,7 +74,7 @@ fn lex_line(line: &str, line_num: usize) -> Vec<(Token, usize, usize)> {
                 end += 1;
             }
             if end == start {
-                let col = if chars[i] == '$' { i } else { i };
+                let col = i;
                 tokens.push((
                     Token::Error("expected hex digits after '$' or '0x'".into()),
                     line_num,

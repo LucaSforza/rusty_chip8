@@ -127,7 +127,7 @@ fn skip_newlines(tokens: &[(Token, usize, usize)], i: &mut usize) {
     while *i < tokens.len() && matches!(tokens[*i].0, Token::Newline) { *i += 1; }
 }
 
-fn peek<'a>(tokens: &'a [(Token, usize, usize)], i: usize) -> Option<&'a Token> {
+fn peek(tokens: &[(Token, usize, usize)], i: usize) -> Option<&Token> {
     tokens.get(i).map(|(t, _, _)| t)
 }
 
@@ -539,18 +539,13 @@ fn parse_single_imm(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u1
 fn parse_imm_list(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u16) -> Result<Vec<u16>, ParseError> {
     skip_newlines(tokens, i);
     let mut vals = Vec::new();
-    loop {
-        match peek(tokens, *i) {
-            Some(Token::Number(n)) => {
-                if *n > max_val {
-                    let (l, c) = tok_pos(tokens, *i);
-                    return Err(ParseError::UnexpectedToken(format!("value {} exceeds max {}", n, max_val), l, c));
-                }
-                vals.push(*n);
-                *i += 1;
-            }
-            _ => break,
+    while let Some(Token::Number(n)) = peek(tokens, *i) {
+        if *n > max_val {
+            let (l, c) = tok_pos(tokens, *i);
+            return Err(ParseError::UnexpectedToken(format!("value {} exceeds max {}", n, max_val), l, c));
         }
+        vals.push(*n);
+        *i += 1;
         skip_newlines(tokens, i);
         if !matches!(peek(tokens, *i), Some(Token::Comma)) { break; }
         *i += 1;

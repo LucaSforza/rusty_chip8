@@ -225,7 +225,7 @@ fn pass2(
             Statement::Space(n) => {
                 let line = format!("  {:04X}                        .space {}", addr, n);
                 listing.push(line);
-                for _ in 0..*n { output.push(0); }
+                output.extend(std::iter::repeat_n(0, *n as usize));
             }
         }
     }
