@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [".", "mcp-server"]
+members = [".", "mcp-server", "chip8-asm"]
 
 [package]
 name = "rusty_chip8"
