@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use crate::encoder::Instr;
 use crate::lexer::Token;
-use crate::parser::{Addr, Inst, Statement};
+use crate::parser::{Addr, Imm, Inst, Statement};
 use crate::symbol::SymbolTable;
 
 mod lexer;
@@ -63,7 +63,7 @@ fn main() {
     let (output, listing) = match pass2(&statements, &addresses, &sym) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("error: undefined symbol '{}'", e);
+            eprintln!("error: {}", e);
             std::process::exit(1);
         }
     };
@@ -233,6 +233,17 @@ fn pass2(
     Ok((output, listing))
 }
 
+fn resolve_imm(imm: &Imm, sym: &SymbolTable, max_val: u16) -> Result<u16, String> {
+    let val = match imm {
+        Imm::Val(n) => *n,
+        Imm::Label(name) => sym.resolve(name).ok_or_else(|| name.clone())?,
+    };
+    if val > max_val {
+        return Err(format!("value {} exceeds max {}", val, max_val));
+    }
+    Ok(val)
+}
+
 fn resolve_inst(inst: &Inst, sym: &SymbolTable) -> Result<Instr, String> {
     let r = |addr: &Addr| -> Result<u16, String> {
         match addr {
@@ -246,11 +257,11 @@ fn resolve_inst(inst: &Inst, sym: &SymbolTable) -> Result<Instr, String> {
         Inst::Ret => Instr::Ret,
         Inst::Jp(a) => Instr::Jp(r(a)?),
         Inst::Call(a) => Instr::Call(r(a)?),
-        Inst::SeVb(x, kk) => Instr::SeVb(*x, *kk),
-        Inst::SneVb(x, kk) => Instr::SneVb(*x, *kk),
+        Inst::SeVb(x, imm) => Instr::SeVb(*x, resolve_imm(imm, sym, 0xFF)? as u8),
+        Inst::SneVb(x, imm) => Instr::SneVb(*x, resolve_imm(imm, sym, 0xFF)? as u8),
         Inst::SeVV(x, y) => Instr::SeVV(*x, *y),
-        Inst::LdVb(x, kk) => Instr::LdVb(*x, *kk),
-        Inst::AddVb(x, kk) => Instr::AddVb(*x, *kk),
+        Inst::LdVb(x, imm) => Instr::LdVb(*x, resolve_imm(imm, sym, 0xFF)? as u8),
+        Inst::AddVb(x, imm) => Instr::AddVb(*x, resolve_imm(imm, sym, 0xFF)? as u8),
         Inst::LdVV(x, y) => Instr::LdVV(*x, *y),
         Inst::Or(x, y) => Instr::Or(*x, *y),
         Inst::And(x, y) => Instr::And(*x, *y),
@@ -263,8 +274,8 @@ fn resolve_inst(inst: &Inst, sym: &SymbolTable) -> Result<Instr, String> {
         Inst::SneVV(x, y) => Instr::SneVV(*x, *y),
         Inst::LdI(a) => Instr::LdI(r(a)?),
         Inst::JpV0(a) => Instr::JpV0(r(a)?),
-        Inst::Rnd(x, kk) => Instr::Rnd(*x, *kk),
-        Inst::Drw(x, y, n) => Instr::Drw(*x, *y, *n),
+        Inst::Rnd(x, imm) => Instr::Rnd(*x, resolve_imm(imm, sym, 0xFF)? as u8),
+        Inst::Drw(x, y, imm) => Instr::Drw(*x, *y, resolve_imm(imm, sym, 0xF)? as u8),
         Inst::Skp(x) => Instr::Skp(*x),
         Inst::Sknp(x) => Instr::Sknp(*x),
         Inst::LdVdt(x) => Instr::LdVdt(*x),

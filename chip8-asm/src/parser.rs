@@ -7,16 +7,22 @@ pub enum Addr {
 }
 
 #[derive(Debug, Clone)]
+pub enum Imm {
+    Val(u16),
+    Label(String),
+}
+
+#[derive(Debug, Clone)]
 pub enum Inst {
     Cls,
     Ret,
     Jp(Addr),
     Call(Addr),
-    SeVb(u8, u8),
-    SneVb(u8, u8),
+    SeVb(u8, Imm),
+    SneVb(u8, Imm),
     SeVV(u8, u8),
-    LdVb(u8, u8),
-    AddVb(u8, u8),
+    LdVb(u8, Imm),
+    AddVb(u8, Imm),
     LdVV(u8, u8),
     Or(u8, u8),
     And(u8, u8),
@@ -29,8 +35,8 @@ pub enum Inst {
     SneVV(u8, u8),
     LdI(Addr),
     JpV0(Addr),
-    Rnd(u8, u8),
-    Drw(u8, u8, u8),
+    Rnd(u8, Imm),
+    Drw(u8, u8, Imm),
     Skp(u8),
     Sknp(u8),
     LdVdt(u8),
@@ -251,7 +257,8 @@ fn parse_se(
     let op2 = parse_operand(tokens, i)?;
     expect_eol(tokens, i)?;
     match (op1, op2) {
-        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::SeVb(x, kk as u8)),
+        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::SeVb(x, Imm::Val(kk))),
+        (Operand::Reg(x), Operand::Ident(s)) => Ok(Inst::SeVb(x, Imm::Label(s))),
         (Operand::Reg(x), Operand::Reg(y)) => Ok(Inst::SeVV(x, y)),
         _ => Err(ParseError::WrongArgCount { mnemonic: "SE".into(), expected: 2, got: 2, line, col }),
     }
@@ -265,7 +272,8 @@ fn parse_sne(
     let op2 = parse_operand(tokens, i)?;
     expect_eol(tokens, i)?;
     match (op1, op2) {
-        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::SneVb(x, kk as u8)),
+        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::SneVb(x, Imm::Val(kk))),
+        (Operand::Reg(x), Operand::Ident(s)) => Ok(Inst::SneVb(x, Imm::Label(s))),
         (Operand::Reg(x), Operand::Reg(y)) => Ok(Inst::SneVV(x, y)),
         _ => Err(ParseError::WrongArgCount { mnemonic: "SNE".into(), expected: 2, got: 2, line, col }),
     }
@@ -279,7 +287,8 @@ fn parse_add(
     let op2 = parse_operand(tokens, i)?;
     expect_eol(tokens, i)?;
     match (op1, op2) {
-        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::AddVb(x, kk as u8)),
+        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::AddVb(x, Imm::Val(kk))),
+        (Operand::Reg(x), Operand::Ident(s)) => Ok(Inst::AddVb(x, Imm::Label(s))),
         (Operand::Reg(x), Operand::Reg(y)) => Ok(Inst::AddVV(x, y)),
         (Operand::I, Operand::Reg(x)) => Ok(Inst::AddI(x)),
         _ => Err(ParseError::WrongArgCount { mnemonic: "ADD".into(), expected: 2, got: 2, line, col }),
@@ -294,7 +303,8 @@ fn parse_ld(
     let op2 = parse_operand(tokens, i)?;
     expect_eol(tokens, i)?;
     match (op1, op2) {
-        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::LdVb(x, kk as u8)),
+        (Operand::Reg(x), Operand::Imm(kk)) => Ok(Inst::LdVb(x, Imm::Val(kk))),
+        (Operand::Reg(x), Operand::Ident(s)) => Ok(Inst::LdVb(x, Imm::Label(s))),
         (Operand::Reg(x), Operand::Reg(y)) => Ok(Inst::LdVV(x, y)),
         (Operand::Reg(x), Operand::DT) => Ok(Inst::LdVdt(x)),
         (Operand::Reg(x), Operand::K) => Ok(Inst::LdK(x)),
@@ -316,7 +326,7 @@ fn parse_rnd(
     skip_comma(tokens, i);
     let kk = parse_imm(tokens, i, 0xFF)?;
     expect_eol(tokens, i)?;
-    Ok(Inst::Rnd(x, kk as u8))
+    Ok(Inst::Rnd(x, kk))
 }
 
 fn parse_drw(
@@ -328,7 +338,7 @@ fn parse_drw(
     expect_comma(tokens, i)?;
     let n = parse_imm(tokens, i, 0x0F)?;
     expect_eol(tokens, i)?;
-    Ok(Inst::Drw(x, y, n as u8))
+    Ok(Inst::Drw(x, y, n))
 }
 
 fn parse_unary_addr(
@@ -427,13 +437,14 @@ fn parse_reg(tokens: &[(Token, usize, usize)], i: &mut usize) -> Result<u8, Pars
     }
 }
 
-fn parse_imm(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u16) -> Result<u16, ParseError> {
+fn parse_imm(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u16) -> Result<Imm, ParseError> {
     let (line, col) = tok_pos(tokens, *i);
     match parse_operand(tokens, i)? {
-        Operand::Imm(n) if n <= max_val => Ok(n),
+        Operand::Imm(n) if n <= max_val => Ok(Imm::Val(n)),
         Operand::Imm(n) => Err(ParseError::UnexpectedToken(
             format!("value {} exceeds max {}", n, max_val), line, col,
         )),
+        Operand::Ident(s) => Ok(Imm::Label(s)),
         _ => Err(ParseError::ExpectedImmediate(line, col)),
     }
 }
