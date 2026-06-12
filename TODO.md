@@ -4,8 +4,9 @@ Priority-ordered list of known issues and improvements.
 
 ## High
 
+- [ ] **Timer thread uses `%` instead of `/`** — `registers.rs:34` computes `(difference.as_millis() % 16)`. Should be `/ 16`. % rarely produces non-zero result (16%16=0, 32%16=0), so timers barely decrement. Makes every game ~10-20x slower than intended.
+- [ ] **`--turbo` flag to speed up delay timers** — CHIP-8 DT/ST timers decrement at fixed 60Hz (wall-clock). ROMs use them for title animations. Add `--turbo` CLI arg that divides DT by a factor (e.g. 10x = 600Hz) so timer-based waits complete faster. Useful for skipping long title screens while debugging. 
 - [ ] **`to_draw` never reset to `false`** — `interpreter.rs:302` sets `to_draw = true` but nothing clears it. After first sprite draw, every frame redraws the full 640x320 buffer. CPU waste.
-- [ ] **Timer thread doesn't decrement correctly** — `registers.rs:34` uses `(difference.as_millis() % 16) as u8` instead of decrementing by 1 at 60Hz. Delay/sound timers don't reach 0 after exactly N/60 seconds. Breaks game timing (e.g. chipwar.ch8).
 - [ ] **No `Result` types, `exit(1)` everywhere** — ~8 `exit(1)` calls across interpreter, display, memory, registers. Any runtime error kills the process. Untestable, undebuggable.
 - [ ] **Keyboard lock contention** — `DataKeys` shared via `Arc<Mutex>`. Multiple fields locked independently. Anti-pattern: should design ownership properly instead of mutex-as-toy.
 

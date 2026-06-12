@@ -397,6 +397,8 @@ impl Chip8Debug {
         self.send_cmd(json!({"cmd": "key_press", "key": key})).await?;
         tokio::time::sleep(Duration::from_millis(200)).await;
         self.send_cmd(json!({"cmd": "key_release", "key": key})).await?;
+        // Give emulator time to process key and settle at next FX0A
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         // 3. Screen after
         let after_resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
