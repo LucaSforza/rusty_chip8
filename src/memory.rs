@@ -32,6 +32,10 @@ impl Memory {
         mem.write_slice(0x50, &FONT);
         mem
     }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.buf
+    }
+
     pub fn read_16bit(&self, address: u16) -> u16 {
         let address = address as usize;
         u16::from_be_bytes([self.buf[address], self.buf[address + 1]])

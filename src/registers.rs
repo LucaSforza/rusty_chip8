@@ -31,7 +31,7 @@ impl Registers {
                     let new_sys_time = SystemTime::now();
                     let difference = new_sys_time.duration_since(last_sys_time).expect("Clock may have gone backwards");
                     last_sys_time = new_sys_time;
-                    let val = (difference.as_millis() % 16) as u8;
+                    let val = (difference.as_millis() / 16) as u8;
                     let s = *sound;
                     if s != 0 {
                         *sound -= s.checked_sub(val).unwrap_or(0);
@@ -53,6 +53,14 @@ impl Registers {
             delay_timer: delay_t,
             _decrement_thread: thread,
         }
+    }
+
+    pub fn all_v(&self) -> [u8; 16] {
+        self.v
+    }
+
+    pub fn stack_snapshot(&self) -> Vec<u16> {
+        self.stack.clone()
     }
 
     pub fn get_v(&self, v_reg: usize) -> u8 {

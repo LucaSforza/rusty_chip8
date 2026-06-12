@@ -1,15 +1,18 @@
+mod debugger;
 mod display;
 mod keyboard;
 mod interpreter;
 mod memory;
 mod registers;
 
-use std::env::Args;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use std::{env, fs::File, path::Path};
+use std::fs::File;
+use std::path::Path;
 
+use clap::Parser;
+use crate::debugger::Debugger;
 use crate::interpreter::Interpreter;
 
 use keyboard::{DataKeys, KeyboardState, ONEHERTZ};
@@ -20,76 +23,31 @@ use rodio::{OutputStream, Sink};
 const WIDTH: usize = 640;
 const HEIGHT: usize = 320;
 
-fn usage(program_name: &str) {
-    eprintln!("[INFO] {program_name} <path> args...");
-    eprintln!("[INFO] Avaliable args:");
-    eprintln!("[INFO]     --speed <cycles per frame>")
-}
-
+#[derive(Parser)]
+#[command(version, about = "CHIP-8 interpreter in Rust")]
 struct Config {
-    _program_name: String,
-    speed: usize,
+    /// Path to CHIP-8 ROM file
     path: String,
+
+    /// Cycles per frame
+    #[arg(short = 's', long = "speed", default_value = "100")]
+    speed: usize,
+
+    /// Target frames per second
+    #[arg(short = 'f', long = "fps", default_value = "60")]
     fps: u32,
-}
 
-impl Config {
-    fn new(mut args: Args) -> Self {
-        let program_name = args.next().unwrap();
-        let path = args.next().unwrap_or_else(|| {
-            eprintln!("[ERROR] no path provided");
-            usage(program_name.as_str());
-            exit(1);
-        });
-        let mut speed = 100;
-        let mut fps = 60;
-       while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--speed" | "-s" => {
-                    speed = {
-                        let cycles = args.next().unwrap_or_else(|| {
-                            eprintln!("[ERROR] Cycles for frame is missing");
-                            usage(program_name.as_str());
-                            exit(1);
-                        });
-                        usize::from_str_radix(&cycles, 10).unwrap_or_else(|_| {
-                            eprintln!("[ERROR] passed in arguments {cycles} that is not a positive integer");
-                            usage(program_name.as_str());
-                            exit(1);
-                        })
-                    }
-                }
-                "--fps" | "-f" => {
-                    fps = {
-                        let cycles = args.next().unwrap_or_else(|| {
-                            eprintln!("[ERROR] frame per second is missing");
-                            usage(program_name.as_str());
-                            exit(1);
-                        });
-                        u32::from_str_radix(&cycles, 10).unwrap_or_else(|_| {
-                            eprintln!("[ERROR] passed in arguments {cycles} that is not a positive integer");
-                            usage(program_name.as_str());
-                            exit(1);
-                        })
-                    }
-                }
-                other => {
-                    eprint!("[ERROR] Unknown arg: {other}")
+    /// Enable debug server (TCP)
+    #[arg(long = "debug", default_value = "true", default_missing_value = "true", num_args = 0..=1, require_equals = false, action = clap::ArgAction::Set)]
+    debug: bool,
 
-                }
-            }
-        }
-        Self {
-            fps: fps,
-            speed: speed,
-            _program_name: program_name,
-            path: path,
-        }
-    }
+    /// Debug server port
+    #[arg(long = "debug-port", default_value = "9876")]
+    debug_port: u16,
 }
 
 fn main() {
-    let configuration = Config::new(env::args());
+    let configuration = Config::parse();
     let path = Path::new(&configuration.path);
     if !path.exists() {
         eprintln!("[ERROR] file '{}' not found", path.to_str().unwrap());
@@ -126,7 +84,15 @@ fn main() {
     let data_keys = Arc::new(DataKeys::new(new_key_press.clone()));
     let keyboard = KeyboardState::new(data_keys.clone());
 
-    let mut interpreter = Interpreter::new(data_keys);
+    let debugger = if configuration.debug {
+        let d = Arc::new(Debugger::new(Some(data_keys.clone())));
+        d.spawn_listener(configuration.debug_port);
+        Some(d)
+    } else {
+        None
+    };
+
+    let mut interpreter = Interpreter::new(data_keys, debugger.clone());
     window.set_input_callback(keyboard);
 
     interpreter.write_rom_on_mem(file);
@@ -140,6 +106,14 @@ fn main() {
 
     //While loop for when the window is open and the escape key is not pressed
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        let running = debugger
+            .as_ref()
+            .map(|d| d.running.load(std::sync::atomic::Ordering::Relaxed))
+            .unwrap_or(true);
+        if !running {
+            break;
+        }
+
         cycles_count += 1;
         interpreter.next_istr();
 
