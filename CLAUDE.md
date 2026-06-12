@@ -44,7 +44,8 @@ cargo run -p chip8-mcp
 
 Tools: `get_screen`, `get_registers`, `get_memory`, `set_breakpoint`,
 `clear_breakpoint`, `step`, `pause`, `continue`, `stop`, `get_state`,
-`key_press`, `key_release`, `key_press_and_release`.
+`key_press`, `key_release`, `key_press_and_release`,
+`screen_script`.
 
 ## Architecture
 

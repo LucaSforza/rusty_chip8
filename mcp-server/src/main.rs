@@ -8,7 +8,7 @@ use serde_json::json;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-const ERR_MSG: &str = "Emulatore non in esecuzione. Avvia con: `cargo run -- <path_to_rom>`";
+const ERR_MSG: &str = "Emulator not running. Start with: `cargo run -- <path_to_rom>`";
 
 // ----- input structs for tools with parameters -----
 
@@ -31,6 +31,13 @@ struct KeyParam {
     /// Hex key value (0x0-0xF). CHIP-8 hex keyboard layout:
     /// 1 2 3 C, 4 5 6 D, 7 8 9 E, A 0 B F
     key: u8,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ScriptParam {
+    /// Python script to run. Receives screen pixels as JSON on stdin,
+    /// outputs analysis to stdout. Script has 5 seconds timeout.
+    script: String,
 }
 
 // ----- MCP server state -----
@@ -411,22 +418,78 @@ impl Chip8Debug {
         let mut out = format!("Key 0x{key:X} pressed and released\n");
 
         if changes.is_empty() {
-            out.push_str("Nessun pixel cambiato. Tasto non registrato o azione nulla.\n");
+            out.push_str("No pixels changed. Key not registered or no-op.\n");
         } else {
             let on_count = changes.iter().filter(|c| c.2).count();
             let off_count = changes.len() - on_count;
-            out.push_str(&format!("Pixel cambiati: {} ({} accesi, {} spenti)\n\n", changes.len(), on_count, off_count));
-            out.push_str("Coordinate:\n");
+            out.push_str(&format!("Pixels changed: {} ({} on, {} off)\n\n", changes.len(), on_count, off_count));
+            out.push_str("Coordinates:\n");
             for (x, y, on) in &changes {
                 out.push_str(&format!("  ({x:2},{y:2}) -> {}\n", if *on { "ON " } else { "OFF" }));
             }
             out.push('\n');
             out.push_str(&mini_map);
-            out.push_str("\n\nSchermo con evidenziazioni (@=nuovo ·=spento █=invariato):\n");
+            out.push_str("\n\nHighlighted screen (@=new ·=off █=unchanged):\n");
             out.push_str(&format!("```\n{highlighted}\n```"));
         }
 
         Ok(CallToolResult::success(vec![Content::text(out)]))
+    }
+
+    #[tool(
+        description = "Run a Python script to analyze the current screen. Screen pixels (64x32 bool array) passed as JSON stdin. Script output returned."
+    )]
+    async fn screen_script(
+        &self,
+        Parameters(ScriptParam { script }): Parameters<ScriptParam>,
+    ) -> Result<CallToolResult, McpError> {
+        let resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
+        let pixels: Vec<Vec<bool>> =
+            serde_json::from_value(resp["pixels"].clone()).unwrap_or_default();
+        let regs = &resp;
+
+        let input = serde_json::json!({
+            "pixels": pixels,
+            "v_regs": regs.get("v_regs"),
+            "pc": regs.get("pc"),
+            "i": regs.get("i"),
+            "delay": regs.get("delay"),
+            "sound": regs.get("sound"),
+        });
+
+        let mut child = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(&script)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| McpError::internal_error(format!("python3 spawn failed: {e}"), None))?;
+
+        use std::io::Write;
+        if let Some(mut stdin) = child.stdin.take() {
+            let input_str = serde_json::to_string(&input)
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            stdin.write_all(input_str.as_bytes())
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        }
+
+        let output = child.wait_with_output()
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        let mut result = String::new();
+        if !output.stdout.is_empty() {
+            result.push_str(&String::from_utf8_lossy(&output.stdout));
+        }
+        if !output.stderr.is_empty() {
+            result.push_str("\n--- stderr ---\n");
+            result.push_str(&String::from_utf8_lossy(&output.stderr));
+        }
+        if !output.status.success() {
+            result.insert_str(0, &format!("[exit code {}]\n", output.status.code().unwrap_or(-1)));
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 }
 
