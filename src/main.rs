@@ -85,7 +85,7 @@ fn main() {
     let keyboard = KeyboardState::new(data_keys.clone());
 
     let debugger = if configuration.debug {
-        let d = Arc::new(Debugger::new());
+        let d = Arc::new(Debugger::new(Some(data_keys.clone())));
         d.spawn_listener(configuration.debug_port);
         Some(d)
     } else {

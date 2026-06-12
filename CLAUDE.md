@@ -38,12 +38,13 @@ MCP server crate (`chip8-mcp`) connects to it and exposes tools for Claude.
 # Terminal 1: emulator
 cargo run -- tests/2-ibm-logo.ch8
 
-# Terminal 2: MCP server (or via .claude/settings.json auto-spawn)
+# Terminal 2: MCP server (or via .mcp.json auto-spawn)
 cargo run -p chip8-mcp
 ```
 
 Tools: `get_screen`, `get_registers`, `get_memory`, `set_breakpoint`,
-`clear_breakpoint`, `step`, `pause`, `continue`, `stop`, `get_state`.
+`clear_breakpoint`, `step`, `pause`, `continue`, `stop`, `get_state`,
+`key_press`, `key_release`, `key_press_and_release`.
 
 ## Architecture
 
@@ -74,8 +75,8 @@ Tools: `get_screen`, `get_registers`, `get_memory`, `set_breakpoint`,
 ```text
 rusty_chip8/         # emulator binary (crate root)
 mcp-server/          # chip8-mcp crate — MCP stdio server using rmcp
-  └── src/main.rs    # tools: get_screen, get_registers, get_memory, breakpoints, step, pause, continue, stop
-.claude/settings.json  # MCP server config for Claude Code (spawns `cargo run -p chip8-mcp`)
+  └── src/main.rs    # tools: get_screen, get_registers, get_memory, breakpoints, step, pause, continue, stop, get_state, key_press, key_release, key_press_and_release
+.mcp.json  # MCP server config for Claude Code (spawns `cargo run -p chip8-mcp`)
 ```
 
 MCP server communicates with emulator via TCP localhost (JSON lines protocol, port 9876 by default).

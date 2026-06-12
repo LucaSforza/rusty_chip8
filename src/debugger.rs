@@ -8,6 +8,8 @@ use std::thread;
 use serde::Serialize;
 
 use crate::display::Display;
+use crate::interpreter::convert_num_to_key;
+use crate::keyboard::DataKeys;
 use crate::memory::Memory;
 use crate::registers::Registers;
 
@@ -29,10 +31,11 @@ pub struct Debugger {
     pub paused: Arc<AtomicBool>,
     pub step_requested: Arc<AtomicBool>,
     pub running: Arc<AtomicBool>,
+    pub keyboard: Option<Arc<DataKeys>>,
 }
 
 impl Debugger {
-    pub fn new() -> Self {
+    pub fn new(keyboard: Option<Arc<DataKeys>>) -> Self {
         Self {
             state: Arc::new(Mutex::new(SharedState {
                 pixels: vec![vec![false; 64]; 32],
@@ -48,6 +51,7 @@ impl Debugger {
             paused: Arc::new(AtomicBool::new(false)),
             step_requested: Arc::new(AtomicBool::new(false)),
             running: Arc::new(AtomicBool::new(true)),
+            keyboard,
         }
     }
 
@@ -177,6 +181,32 @@ impl Debugger {
             "stop" => {
                 self.running.store(false, Ordering::Relaxed);
                 serde_json::json!({"ok": true})
+            }
+            "key_press" => {
+                let key_val = req.get("key").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+                if key_val > 0x0F {
+                    return serde_json::json!({"error": "key must be 0x0-0xF"});
+                }
+                match self.keyboard {
+                    Some(ref kb) => {
+                        kb.inject_key_press(convert_num_to_key(key_val));
+                        serde_json::json!({"ok": true})
+                    }
+                    None => serde_json::json!({"error": "keyboard not connected"}),
+                }
+            }
+            "key_release" => {
+                let key_val = req.get("key").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
+                if key_val > 0x0F {
+                    return serde_json::json!({"error": "key must be 0x0-0xF"});
+                }
+                match self.keyboard {
+                    Some(ref kb) => {
+                        kb.inject_key_release(convert_num_to_key(key_val));
+                        serde_json::json!({"ok": true})
+                    }
+                    None => serde_json::json!({"error": "keyboard not connected"}),
+                }
             }
             "get_state" => {
                 let state = self.state.lock().unwrap();

@@ -5,6 +5,7 @@ use rmcp::{ErrorData as McpError, ServerHandler, ServiceExt, tool, tool_handler,
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 const ERR_MSG: &str = "Emulatore non in esecuzione. Avvia con: `cargo run -- <path_to_rom>`";
@@ -23,6 +24,13 @@ struct MemoryRange {
 struct AddressParam {
     /// Address for breakpoint
     address: u16,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct KeyParam {
+    /// Hex key value (0x0-0xF). CHIP-8 hex keyboard layout:
+    /// 1 2 3 C, 4 5 6 D, 7 8 9 E, A 0 B F
+    key: u8,
 }
 
 // ----- MCP server state -----
@@ -120,6 +128,59 @@ impl Chip8Debug {
             out.push('\n');
         }
         out
+    }
+
+    fn diff_screens(before: &[Vec<bool>], after: &[Vec<bool>]) -> (Vec<(usize, usize, bool)>, String, String) {
+        let mut changes = Vec::new();
+        let mut min_x = 64usize; let mut max_x = 0usize;
+        let mut min_y = 32usize; let mut max_y = 0usize;
+
+        for y in 0..32 {
+            for x in 0..64 {
+                if before[y][x] != after[y][x] {
+                    changes.push((x, y, after[y][x]));
+                    if x < min_x { min_x = x; }
+                    if x > max_x { max_x = x; }
+                    if y < min_y { min_y = y; }
+                    if y > max_y { max_y = y; }
+                }
+            }
+        }
+
+        // Mini-map: bounding box of changes
+        let mut mini = String::new();
+        if !changes.is_empty() {
+            mini.push_str(&format!("Bbox {}-{} x {}-{}:\n", min_x, max_x, min_y, max_y));
+            for y in min_y..=max_y {
+                mini.push_str(&format!("{:2}|", y));
+                for x in min_x..=max_x {
+                    mini.push(if after[y][x] { '█' } else { if before[y][x] { '·' } else { ' ' } });
+                }
+                mini.push('\n');
+            }
+        }
+
+        // Full screen with highlights
+        let mut highlighted = String::with_capacity(64 * 33 + 4);
+        highlighted.push('┌');
+        for _ in 0..64 { highlighted.push('─'); }
+        highlighted.push_str("┐\n");
+        for y in 0..32 {
+            highlighted.push('│');
+            for x in 0..64 {
+                if before[y][x] != after[y][x] {
+                    highlighted.push(if after[y][x] { '@' } else { '·' });
+                } else {
+                    highlighted.push(if before[y][x] { '█' } else { ' ' });
+                }
+            }
+            highlighted.push_str("│\n");
+        }
+        highlighted.push('└');
+        for _ in 0..64 { highlighted.push('─'); }
+        highlighted.push('┘');
+
+        (changes, mini, highlighted)
     }
 }
 
@@ -238,6 +299,131 @@ impl Chip8Debug {
         let out = format!(
             "## Screen\n```\n{screen}\n```\n\n## Registers\n{regs}\n\n## Memory (0x000-0x0FF)\n{mem_hex}"
         );
+        Ok(CallToolResult::success(vec![Content::text(out)]))
+    }
+
+    #[tool(description = "Press and hold a CHIP-8 hex key (0x0-0xF). Use key_release to release.")]
+    async fn key_press(
+        &self,
+        Parameters(KeyParam { key }): Parameters<KeyParam>,
+    ) -> Result<CallToolResult, McpError> {
+        if key > 0x0F {
+            return Err(McpError::invalid_params("key must be 0x0-0xF", None));
+        }
+        self.send_cmd(json!({"cmd": "key_press", "key": key}))
+            .await?;
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Key 0x{key:X} pressed"
+        ))]))
+    }
+
+    #[tool(description = "Release a previously pressed CHIP-8 hex key (0x0-0xF).")]
+    async fn key_release(
+        &self,
+        Parameters(KeyParam { key }): Parameters<KeyParam>,
+    ) -> Result<CallToolResult, McpError> {
+        if key > 0x0F {
+            return Err(McpError::invalid_params("key must be 0x0-0xF", None));
+        }
+        self.send_cmd(json!({"cmd": "key_release", "key": key}))
+            .await?;
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Key 0x{key:X} released"
+        ))]))
+    }
+
+    #[tool(
+        description = "Press and release a CHIP-8 hex key (0x0-0xF) after a short delay. Use this for single key taps."
+    )]
+    async fn key_press_and_release(
+        &self,
+        Parameters(KeyParam { key }): Parameters<KeyParam>,
+    ) -> Result<CallToolResult, McpError> {
+        if key > 0x0F {
+            return Err(McpError::invalid_params("key must be 0x0-0xF", None));
+        }
+        self.send_cmd(json!({"cmd": "key_press", "key": key}))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        self.send_cmd(json!({"cmd": "key_release", "key": key}))
+            .await?;
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Key 0x{key:X} pressed and released"
+        ))]))
+    }
+
+    #[tool(
+        description = "Press and release a CHIP-8 hex key (0x0-0xF) with a delay, then return the screen state. Use this to press a key and see the result."
+    )]
+    async fn key_tap_and_get_screen(
+        &self,
+        Parameters(KeyParam { key }): Parameters<KeyParam>,
+    ) -> Result<CallToolResult, McpError> {
+        if key > 0x0F {
+            return Err(McpError::invalid_params("key must be 0x0-0xF", None));
+        }
+        self.send_cmd(json!({"cmd": "key_press", "key": key}))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        self.send_cmd(json!({"cmd": "key_release", "key": key}))
+            .await?;
+
+        let resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
+        let pixels: Vec<Vec<bool>> =
+            serde_json::from_value(resp["pixels"].clone()).unwrap_or_default();
+        let screen = Chip8Debug::render_screen(&pixels);
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "Key 0x{key:X} pressed and released\n\n```\n{screen}\n```"
+        ))]))
+    }
+
+    #[tool(
+        description = "Press and release a CHIP-8 hex key (0x0-0xF) with a delay, then return SCREEN DIFF. Shows only pixels that changed. Use this to see exactly what a key press does."
+    )]
+    async fn key_tap_and_get_diff(
+        &self,
+        Parameters(KeyParam { key }): Parameters<KeyParam>,
+    ) -> Result<CallToolResult, McpError> {
+        if key > 0x0F {
+            return Err(McpError::invalid_params("key must be 0x0-0xF", None));
+        }
+
+        // 1. Screen before
+        let before_resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
+        let before: Vec<Vec<bool>> =
+            serde_json::from_value(before_resp["pixels"].clone()).unwrap_or_default();
+
+        // 2. Key press
+        self.send_cmd(json!({"cmd": "key_press", "key": key})).await?;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        self.send_cmd(json!({"cmd": "key_release", "key": key})).await?;
+
+        // 3. Screen after
+        let after_resp = self.send_cmd(json!({"cmd": "get_screen"})).await?;
+        let after: Vec<Vec<bool>> =
+            serde_json::from_value(after_resp["pixels"].clone()).unwrap_or_default();
+
+        // 4. Compute diff
+        let (changes, mini_map, highlighted) = Self::diff_screens(&before, &after);
+
+        let mut out = format!("Key 0x{key:X} pressed and released\n");
+
+        if changes.is_empty() {
+            out.push_str("Nessun pixel cambiato. Tasto non registrato o azione nulla.\n");
+        } else {
+            let on_count = changes.iter().filter(|c| c.2).count();
+            let off_count = changes.len() - on_count;
+            out.push_str(&format!("Pixel cambiati: {} ({} accesi, {} spenti)\n\n", changes.len(), on_count, off_count));
+            out.push_str("Coordinate:\n");
+            for (x, y, on) in &changes {
+                out.push_str(&format!("  ({x:2},{y:2}) -> {}\n", if *on { "ON " } else { "OFF" }));
+            }
+            out.push('\n');
+            out.push_str(&mini_map);
+            out.push_str("\n\nSchermo con evidenziazioni (@=nuovo ·=spento █=invariato):\n");
+            out.push_str(&format!("```\n{highlighted}\n```"));
+        }
+
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
 }

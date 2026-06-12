@@ -1,5 +1,6 @@
 use core::fmt;
-use std::{cell::Cell, sync::{Arc, Mutex}};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use minifb::{InputCallback, Key};
 
@@ -12,7 +13,7 @@ pub struct DataKeys {
     last_key_pressed: Mutex<Option<Key>>,
     new_pressed: Arc<Mutex<bool>>,
     i: Mutex<usize>,
-    waiting: Cell<bool>, //TODO: continuare da qua
+    waiting: AtomicBool,
 }
 
 impl DataKeys {
@@ -23,7 +24,7 @@ impl DataKeys {
             last_key_pressed: Mutex::new(None),
             new_pressed: new_pressed,
             i: 0.into(),
-            waiting: false.into(),
+            waiting: AtomicBool::new(false),
         }
     }
 
@@ -56,7 +57,7 @@ impl DataKeys {
         let mut i = self.i.lock().unwrap();
         *i += 1;
         let mut buf = self.buf.lock().unwrap();
-        if self.waiting.get() {
+        if self.waiting.load(Ordering::Relaxed) {
             *self.new_pressed.lock().unwrap() = true;
         }
         if let Some(index) = buf.iter().position(|x| *x == key) {
@@ -69,11 +70,20 @@ impl DataKeys {
     }
 
     pub fn start_waiting(&self) {
-        self.waiting.set(true)
+        self.waiting.store(true, Ordering::Relaxed)
     }
 
     pub fn stop_waiting(&self) {
-        self.waiting.set(false)
+        self.waiting.store(false, Ordering::Relaxed)
+    }
+
+    pub fn inject_key_press(&self, key: Key) {
+        self.push(key);
+        self.set_new_key(key);
+    }
+
+    pub fn inject_key_release(&self, key: Key) {
+        self.remove(key);
     }
 }
 
