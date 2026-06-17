@@ -56,12 +56,37 @@ pub enum Statement {
     Const(String, u16),
     Label(String),
     Inst(Inst),
-    Byte(Vec<u8>),
-    Word(Vec<u16>),
+    Byte(Vec<Imm>),
+    Word(Vec<Imm>),
     Ascii(String),
     Asciz(String),
     Align(u8),
     Space(u16),
+    Struct {
+        name: String,
+        fields: Vec<StructField>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum FieldKind {
+    Byte,
+    Word,
+}
+
+impl FieldKind {
+    pub fn size(&self) -> u16 {
+        match self {
+            FieldKind::Byte => 1,
+            FieldKind::Word => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: String,
+    pub kind: FieldKind,
 }
 
 #[derive(Debug)]
@@ -162,6 +187,16 @@ fn parse_line(tokens: &[(Token, usize, usize)], i: &mut usize) -> Result<Vec<Sta
         *i += 1;
         stmts.push(parse_directive(tokens, i)?);
         return Ok(stmts);
+    }
+
+    // Struct keyword (no leading dot)
+    if let Some(Token::Word(w)) = peek(tokens, *i) {
+        if w == "struct" {
+            let (l, c) = tok_pos(tokens, *i);
+            *i += 1; // skip "struct"
+            stmts.push(parse_struct_body(tokens, i, l, c)?);
+            return Ok(stmts);
+        }
     }
 
     // Instruction
@@ -499,8 +534,8 @@ fn parse_directive(tokens: &[(Token, usize, usize)], i: &mut usize) -> Result<St
 
     match name.to_lowercase().as_str() {
         "org"   => { let v = parse_single_imm(tokens, i, 0x0FFF)?; Ok(Statement::Org(v)) }
-        "byte"  => { let v = parse_imm_list(tokens, i, 0xFF)?.into_iter().map(|x| x as u8).collect::<Vec<_>>(); Ok(Statement::Byte(v)) }
-        "word"  => { let v = parse_imm_list(tokens, i, 0xFFFF)?; Ok(Statement::Word(v)) }
+        "byte"  => { let v = parse_imm_or_label_list(tokens, i, 0xFF)?; Ok(Statement::Byte(v)) }
+        "word"  => { let v = parse_imm_or_label_list(tokens, i, 0xFFFF)?; Ok(Statement::Word(v)) }
         "ascii" => { let s = parse_string(tokens, i)?; Ok(Statement::Ascii(s)) }
         "asciz" => { let s = parse_string(tokens, i)?; Ok(Statement::Asciz(s)) }
         "align" => { let n = parse_single_imm(tokens, i, 0xFF)? as u8; Ok(Statement::Align(n)) }
@@ -536,19 +571,29 @@ fn parse_single_imm(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u1
     }
 }
 
-fn parse_imm_list(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u16) -> Result<Vec<u16>, ParseError> {
+fn parse_imm_or_label_list(tokens: &[(Token, usize, usize)], i: &mut usize, max_val: u16) -> Result<Vec<Imm>, ParseError> {
     skip_newlines(tokens, i);
     let mut vals = Vec::new();
-    while let Some(Token::Number(n)) = peek(tokens, *i) {
-        if *n > max_val {
-            let (l, c) = tok_pos(tokens, *i);
-            return Err(ParseError::UnexpectedToken(format!("value {} exceeds max {}", n, max_val), l, c));
+    loop {
+        match peek(tokens, *i) {
+            Some(Token::Number(n)) => {
+                if *n > max_val {
+                    let (l, c) = tok_pos(tokens, *i);
+                    return Err(ParseError::UnexpectedToken(format!("value {} exceeds max {}", n, max_val), l, c));
+                }
+                vals.push(Imm::Val(*n));
+                *i += 1;
+            }
+            Some(Token::Word(w)) => {
+                vals.push(Imm::Label(w.clone()));
+                *i += 1;
+            }
+            _ => break,
         }
-        vals.push(*n);
-        *i += 1;
         skip_newlines(tokens, i);
         if !matches!(peek(tokens, *i), Some(Token::Comma)) { break; }
         *i += 1;
+        skip_newlines(tokens, i);
     }
     if vals.is_empty() {
         let (l, c) = tok_pos(tokens, *i);
@@ -565,4 +610,116 @@ fn parse_string(tokens: &[(Token, usize, usize)], i: &mut usize) -> Result<Strin
         Some(t) => Err(ParseError::UnexpectedToken(format!("{:?}", t), line, col)),
         None => Err(ParseError::ExpectedValue(line, col)),
     }
+}
+
+// -- struct parsing --
+
+fn parse_struct_body(
+    tokens: &[(Token, usize, usize)],
+    i: &mut usize,
+    line: usize,
+    col: usize,
+) -> Result<Statement, ParseError> {
+    // Parse struct name
+    let name = match peek(tokens, *i) {
+        Some(Token::Word(w)) => {
+            let n = w.clone();
+            *i += 1;
+            n
+        }
+        _ => return Err(ParseError::ExpectedIdent(line, col)),
+    };
+
+    // Expect {
+    skip_newlines(tokens, i);
+    match peek(tokens, *i) {
+        Some(Token::LBrace) => {
+            *i += 1;
+        }
+        Some(t) => {
+            return Err(ParseError::UnexpectedToken(
+                format!("expected '{{', got {:?}", t),
+                line,
+                col,
+            ));
+        }
+        None => {
+            return Err(ParseError::UnexpectedToken(
+                "expected '{'".into(),
+                line,
+                col,
+            ));
+        }
+    }
+
+    // Parse fields until }
+    let mut fields = Vec::new();
+    loop {
+        skip_newlines(tokens, i);
+        match peek(tokens, *i) {
+            Some(Token::RBrace) => {
+                *i += 1;
+                break;
+            }
+            Some(Token::Word(_)) => {
+                fields.push(parse_struct_field(tokens, i)?);
+            }
+            _ => {
+                let (l, c) = tok_pos(tokens, *i);
+                return Err(ParseError::UnexpectedToken(
+                    "expected field name or '}'".into(),
+                    l,
+                    c,
+                ));
+            }
+        }
+    }
+
+    Ok(Statement::Struct { name, fields })
+}
+
+fn parse_struct_field(
+    tokens: &[(Token, usize, usize)],
+    i: &mut usize,
+) -> Result<StructField, ParseError> {
+    let field_name = match peek(tokens, *i) {
+        Some(Token::Word(w)) => {
+            let n = w.clone();
+            *i += 1;
+            n
+        }
+        _ => {
+            let (l, c) = tok_pos(tokens, *i);
+            return Err(ParseError::ExpectedIdent(l, c));
+        }
+    };
+
+    let kind = match peek(tokens, *i) {
+        Some(Token::Word(w)) => match w.to_lowercase().as_str() {
+            "byte" => FieldKind::Byte,
+            "word" => FieldKind::Word,
+            kw => {
+                let (l, c) = tok_pos(tokens, *i);
+                return Err(ParseError::InvalidDirective(
+                    format!("expected 'byte' or 'word', got '{}'", kw),
+                    l,
+                    c,
+                ));
+            }
+        },
+        _ => {
+            let (l, c) = tok_pos(tokens, *i);
+            return Err(ParseError::UnexpectedToken(
+                "expected 'byte' or 'word'".into(),
+                l,
+                c,
+            ));
+        }
+    };
+    *i += 1;
+
+    Ok(StructField {
+        name: field_name,
+        kind,
+    })
 }

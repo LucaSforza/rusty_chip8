@@ -8,6 +8,8 @@ pub enum Token {
     Dot,
     LBracket,
     RBracket,
+    LBrace,
+    RBrace,
     Equals,
     Newline,
     Eof,
@@ -125,11 +127,16 @@ fn lex_line(line: &str, line_num: usize) -> Vec<(Token, usize, usize)> {
             continue;
         }
 
-        // Word (identifier, mnemonic, register, directive name)
+        // Word (identifier, mnemonic, register, directive name, dotted struct field)
         if chars[i].is_ascii_alphabetic() || chars[i] == '_' {
             let start = i;
             while i < chars.len()
-                && (chars[i].is_ascii_alphanumeric() || chars[i] == '_')
+                && (chars[i].is_ascii_alphanumeric()
+                    || chars[i] == '_'
+                    || (chars[i] == '.'
+                        && i + 1 < chars.len()
+                        && (chars[i + 1].is_ascii_alphanumeric()
+                            || chars[i + 1] == '_')))
             {
                 i += 1;
             }
@@ -145,6 +152,8 @@ fn lex_line(line: &str, line_num: usize) -> Vec<(Token, usize, usize)> {
             '.' => tokens.push((Token::Dot, line_num, col)),
             '[' => tokens.push((Token::LBracket, line_num, col)),
             ']' => tokens.push((Token::RBracket, line_num, col)),
+            '{' => tokens.push((Token::LBrace, line_num, col)),
+            '}' => tokens.push((Token::RBrace, line_num, col)),
             '=' => tokens.push((Token::Equals, line_num, col)),
             c => {
                 tokens.push((
