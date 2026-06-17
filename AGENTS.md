@@ -15,6 +15,18 @@ cargo run <path_to_rom>             # run emulator
 cargo run <path> -- --speed 10 --fps 60  # with options
 cargo run -p chip8-mcp              # MCP debug server (connects to emulator)
 cargo run -p chip8-asm -- input.asm -o rom.ch8  # assemble ROM
+cargo run -p chip8-lsp              # LSP server (stdio mode)
+```
+
+### Justfile
+
+```bash
+just build-lsp              # Build chip8-lsp
+just test-lsp               # Run LSP tests (2 unit + 1 integration)
+just build-lsp-release      # Release build
+just run-lsp                # Run LSP in stdio mode
+just install-lsp-nvim       # Build + copy binary + print Neovim config
+just install-lsp-vscode     # Build + package VSIX extension
 ```
 
 Args (emulator): `--speed/-s <cycles per frame>` (default 100), `--fps/-f <target fps>` (default 60),
@@ -30,6 +42,24 @@ Located in `tests/`. Run with: `cargo run tests/<rom>`.
 - `3-corax+.ch8`, `4-flags.ch8`, `5-quirks.ch8` — instruction test suites
 - `6-keypad.ch8` — keyboard test
 - `7-beep.ch8` — sound test
+
+### LSP Server
+
+Language server for CHIP-8 assembly (`chip8-lsp`). Registers in `.asm`/`.chip8`/`.ch8` files.
+
+```bash
+# Run directly:
+cargo run -p chip8-lsp
+
+# Configure in opencode.jsonc:
+# "lsp": { "chip8": { "command": ["cargo", "run", "-p", "chip8-lsp"], "extensions": [".asm", ".chip8"] } }
+
+# Neovim: just install-lsp-nvim
+# VSCode:  just install-lsp-vscode
+```
+
+Provides: diagnostics, hover, go-to-definition, find-references, completions,
+document/workspace symbols, semantic highlighting, rename.
 
 ### Debug MCP Server
 
@@ -69,9 +99,11 @@ Tools: `get_screen`, `get_registers`, `get_memory`, `set_breakpoint`,
 ### Key design notes
 - Timers decrement in a background thread using `thread::sleep(Duration::from_secs_f64(1.0/60.0))` — approximate 60Hz tick
 - Keyboard uses `minifb::InputCallback` trait, state stored behind `Arc<Mutex>` for shared access between main thread and minifb callback
-- No test framework currently — validation is manual via test ROMs
 - FPS display printed to stdout once per second
 - Debugger TCP thread accepts one connection at a time, processes JSON commands, returns JSON responses
+- LSP server uses tower-lsp 0.20 + lsp-types 0.94; all handlers (hover, definition, completion, symbols, semantic tokens, rename)
+- Partial analysis: even with parse errors, tokens and symbol table are preserved so hover/completion work on valid portions
+- LSP integration test sends real LSP protocol messages over stdio; 2 unit tests + 1 integration test
 
 ## Game ROMs
 
@@ -142,17 +174,39 @@ chip8-asm/           # assembler crate (lib + binary)
       ├── lexer.rs       # Tokenizer (LBrace/RBrace, dotted identifiers)
       ├── parser.rs      # Instruction/directive/struct parser
       ├── encoder.rs     # All 35 opcodes → [u8; 2] — UNCHANGED
-      ├── symbol.rs      # Label + constant table — UNCHANGED
+      ├── symbol.rs      # Label + constant table
       ├── sourcemap.rs   # SourceMap for cross-file diagnostics
       ├── include.rs     # IncludeResolver + FileProvider + cycle detection
       ├── macroexpand.rs # Macro collector + expander + local labels
       └── preprocess.rs  # Orchestrates include → macro pipeline
   └── tests/
       └── integration.rs # 12 assembler tests
+chip8-lsp/           # LSP server crate
+  └── src/
+      ├── main.rs        # Entry point
+      ├── server.rs      # tower-lsp Backend (all handlers)
+      ├── document.rs    # Per-document analysis state
+      ├── workspace.rs   # File discovery + include graph
+      ├── diagnostics.rs # Error mapping LSP
+      ├── hover.rs       # Hover info (instrs, regs, dirs, symbols)
+      ├── definition.rs  # Go to definition
+      ├── references.rs  # Find references (cross-workspace)
+      ├── completion.rs  # Context-aware completions
+      ├── symbols.rs     # Document/workspace symbols
+      ├── highlight.rs   # Semantic tokens
+      └── rename.rs      # Safe rename for labels/consts/macros
+  └── tests/
+      └── lsp_test.rs    # Integration test (LSP protocol via stdio)
+vscode-chip8/        # VS Code extension (thin client)
+  ├── package.json
+  ├── src/extension.js
+  ├── language-configuration.json
+  └── syntaxes/chip8.tmGrammar.json
 examples/
   └── pong/              # Pong game demonstrating new assembler features
       ├── pong.asm       # Main game (include, .const values)
       └── const.asm      # Constants + struct GameState
+justfile  # Build/test/install commands
 .mcp.json  # MCP server config for Claude Code
 ```
 
@@ -245,13 +299,14 @@ struct Sprite {
 
 ```
 chip8-asm/src/
-├── lib.rs              # Public API, AssemblyOptions, assemble(), assemble_file()
+├── lib.rs              # Public API, AssemblyOptions, assemble(), assemble_file(),
+│                       # analyze(), analyze_with(), compute_layout, generate_code
 ├── main.rs             # Thin CLI wrapper
 ├── lexer.rs            # Tokenizer (LBrace/RBrace, dotted identifiers)
 ├── parser.rs           # Parser (struct keyword, symbolic .byte/.word)
 ├── encoder.rs          # Opcode encoder — UNCHANGED
-├── symbol.rs           # Symbol table — UNCHANGED
-├── sourcemap.rs        # SourceMap: Vec<(file, line)> for cross-file diagnostics
+├── symbol.rs           # Symbol table + labels()/constants() iterators
+├── sourcemap.rs        # SourceMap: Vec<(file, line)> + resolve_pos()
 ├── include.rs          # IncludeResolver + FileProvider trait + cycle detection
 ├── macroexpand.rs      # Phase 1: collect_definitions, Phase 2: expand + local labels
 └── preprocess.rs       # Orchestrates include → macro collect → macro expand
