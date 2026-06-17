@@ -113,19 +113,46 @@ World-rotation puzzle (FEZ clone). Keys rotate perspective:
 
 Puzzle/platformer. Controls TBD.
 
+### pong (examples/pong/)
+
+Pong game written in assembler demonstrating all new features (includes, macros, structures, local labels).
+
+**Building**: `cargo run -p chip8-asm -- examples/pong/pong.asm -o pong.ch8`
+
+**Controls**:
+- Menu: press `1` (0x1) for 1-player, `2` (0x2) for 2-player
+- P1 up: `W` (0x5), P1 down: `S` (0x8)
+- P2 up: `E` (0x6), P2 down: `D` (0x9)
+- First to 5 wins, then press any key to restart
+
+**AI** (1P mode): Right paddle tracks ball Y position with a 3px center offset.
+**Structure**: `include "const.asm"` → `.const` values + `struct GameState` → main game code.
+Uses built-in CHIP-8 font for score (0/1/2/3/4/5) and menu digits.
+
 ## Workspace
 
 ```text
 rusty_chip8/         # emulator binary (crate root)
 mcp-server/          # chip8-mcp crate — MCP stdio server
   └── src/main.rs    # debug tools (get_screen, get_registers, step, breakpoints, etc.)
-chip8-asm/           # assembler binary crate
+chip8-asm/           # assembler crate (lib + binary)
   └── src/
-      ├── main.rs    # CLI, two-pass assembly
-      ├── lexer.rs   # tokenizer
-      ├── parser.rs  # instruction/directive parser
-      ├── encoder.rs # all 35 opcodes → [u8; 2]
-      └── symbol.rs  # label + constant table
+      ├── lib.rs         # Public API, assemble(), pipeline driver
+      ├── main.rs        # Thin CLI wrapper
+      ├── lexer.rs       # Tokenizer (LBrace/RBrace, dotted identifiers)
+      ├── parser.rs      # Instruction/directive/struct parser
+      ├── encoder.rs     # All 35 opcodes → [u8; 2] — UNCHANGED
+      ├── symbol.rs      # Label + constant table — UNCHANGED
+      ├── sourcemap.rs   # SourceMap for cross-file diagnostics
+      ├── include.rs     # IncludeResolver + FileProvider + cycle detection
+      ├── macroexpand.rs # Macro collector + expander + local labels
+      └── preprocess.rs  # Orchestrates include → macro pipeline
+  └── tests/
+      └── integration.rs # 12 assembler tests
+examples/
+  └── pong/              # Pong game demonstrating new assembler features
+      ├── pong.asm       # Main game (include, .const values)
+      └── const.asm      # Constants + struct GameState
 .mcp.json  # MCP server config for Claude Code
 ```
 
@@ -137,3 +164,113 @@ Syntax: `;`/`#` comments, `label:` labels, `V0`-`VF`/`I`/`DT`/`ST` registers, `#
 Directives: `.org`, `.byte`, `.word`, `.ascii`, `.asciz`, `.align`, `.space`, `.const`.
 All 35 standard instructions. Two-pass assembly for forward label references.
 `.const` values usable as immediate operands (e.g., `LD V0, MY_CONST`).
+`.byte` and `.word` accept symbolic references (e.g., `.word Sprite.width`).
+
+#### Preprocessing pipeline
+
+Source files flow through a preprocessing pipeline before lexing/parsing:
+
+```
+Source Files → IncludeResolver → MacroProcessor → MacroExpander → Lexer → Parser → compute_layout → generate_code → ROM
+```
+
+#### Include system
+
+```asm
+include "constants.asm"
+include "sprites/player.asm"
+```
+
+- Processed before lexing — textual include resolution.
+- Relative paths resolved from the including file.
+- Nested includes supported; include cycles detected with clear error.
+- Duplicate includes allowed (FASM-style).
+- Source locations preserved for diagnostics via `SourceMap`.
+
+#### Macro system
+
+```asm
+macro clear_screen {
+    CLS
+}
+
+macro load_const reg, value {
+    LD reg, value
+}
+
+clear_screen
+load_const V0, 10
+```
+
+- Text-level expansion before lexing — independent from instruction parsing.
+- Parameterized macros; zero-argument macros; multi-line bodies.
+- Single-line bodies: `macro name { body }` or `macro name arg { body }`
+- Recursive expansion detection with clear diagnostics.
+- Wrong argument count produces error at invocation site.
+- Macros shadow CHIP-8 instructions by name; arg-count mismatch → falls through to instruction parsing.
+
+#### Local labels inside macros
+
+```asm
+macro spin reg {
+%%loop:
+    ADD reg, 1
+    JP %%loop
+}
+```
+
+- `%%name:` defines a local label; `%%name` references it.
+- Each invocation generates unique labels: `__m1_loop`, `__m2_loop`, etc.
+- Counter is global across all macro invocations — no collisions with user labels.
+- Works with forward references via standard two-pass resolution.
+
+#### Structures
+
+```asm
+struct Sprite {
+    x byte
+    y byte
+    width byte
+    height byte
+}
+```
+
+- Generates constants: `Sprite.x = 0`, `Sprite.y = 1`, `Sprite.width = 2`, `Sprite.height = 3`, `Sprite.SIZE = 4`.
+- Supports `byte` and `word` fields; word fields advance offset by 2.
+- Structure definition is compile-time metadata only — no runtime representation.
+- Integrated with existing symbol table; `.const` entries created during `compute_layout`.
+- Dotted identifiers (e.g., `Sprite.width`) are tokenized as single `Word` tokens in lexer.
+
+#### Assembler module layout
+
+```
+chip8-asm/src/
+├── lib.rs              # Public API, AssemblyOptions, assemble(), assemble_file()
+├── main.rs             # Thin CLI wrapper
+├── lexer.rs            # Tokenizer (LBrace/RBrace, dotted identifiers)
+├── parser.rs           # Parser (struct keyword, symbolic .byte/.word)
+├── encoder.rs          # Opcode encoder — UNCHANGED
+├── symbol.rs           # Symbol table — UNCHANGED
+├── sourcemap.rs        # SourceMap: Vec<(file, line)> for cross-file diagnostics
+├── include.rs          # IncludeResolver + FileProvider trait + cycle detection
+├── macroexpand.rs      # Phase 1: collect_definitions, Phase 2: expand + local labels
+└── preprocess.rs       # Orchestrates include → macro collect → macro expand
+
+chip8-asm/tests/
+└── integration.rs      # 12 tests covering includes, macros, local labels, structs, recursion
+```
+
+#### Pong game example
+
+`examples/pong/` — demonstrates all new features:
+
+```bash
+cargo run -p chip8-asm -- examples/pong/pong.asm -o pong.ch8
+cargo run -- pong.ch8
+```
+
+- `pong.asm` — main game with `include "const.asm"`
+- `const.asm` — `.const` values + `struct GameState` for documentation
+- 1-player (vs AI) or 2-player mode, W/S and E/D controls, first to 5 wins
+- Menu: press 1 for 1P, 2 for 2P
+- Key mapping: P1 up=W(0x5), P1 down=S(0x8), P2 up=E(0x6), P2 down=D(0x9)
