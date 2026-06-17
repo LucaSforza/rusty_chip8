@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "chip8-debug": {
+      "type": "local",
+      "command": ["cargo", "run", "-p", "chip8-mcp"],
+      "cwd": ".",
+      "enabled": true,
+      "environment": {
+        "CHIP8_DEBUG_PORT": "9876"
+      }
+    }
+  }
+}
