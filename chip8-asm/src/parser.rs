@@ -139,7 +139,10 @@ pub fn parse(tokens: &[(Token, usize, usize)]) -> Result<Vec<Statement>, Vec<Par
 
         match parse_line(tokens, &mut i) {
             Ok(mut line_stmts) => stmts.append(&mut line_stmts),
-            Err(e) => errors.push(e),
+            Err(e) => {
+                errors.push(e);
+                eat_rest(tokens, &mut i);
+            }
         }
     }
 
@@ -173,12 +176,10 @@ fn parse_line(tokens: &[(Token, usize, usize)], i: &mut usize) -> Result<Vec<Sta
     if let Some(Token::Word(w)) = peek(tokens, *i) {
         if *i + 1 < tokens.len() && matches!(tokens[*i + 1].0, Token::Colon) {
             stmts.push(Statement::Label(w.clone()));
-            *i += 2; // skip Word and Colon
-            skip_newlines(tokens, i);
+            *i += 2;
             if is_eol(tokens, *i) {
-                return Ok(stmts); // just the label
+                return Ok(stmts);
             }
-            // fall through to parse instruction/directive on same line
         }
     }
 

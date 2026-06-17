@@ -76,19 +76,32 @@ pub fn assemble_with(
     source: &str,
     opts: &AssemblyOptions,
 ) -> Result<AssembleResult, Vec<AssemblyError>> {
-    // 1. Preprocessing
-    let pp = if opts.files.is_empty() {
-        let fs = FsFileProvider;
-        preprocess::preprocess(source, &opts.base_dir, &fs)
-            .map_err(|errs| errs.into_iter().map(pp_error_to_assembly).collect::<Vec<_>>())?
+    // 1. Preprocessing (skip if no includes or macros)
+    let has_includes = source.contains("include \"") || source.contains("INCLUDE \"");
+    let has_macros = source.contains("\nmacro ") || source.starts_with("macro ");
+    let pp = if has_includes || has_macros {
+        if opts.files.is_empty() {
+            let fs = FsFileProvider;
+            preprocess::preprocess(source, &opts.base_dir, &fs)
+                .map_err(|errs| errs.into_iter().map(pp_error_to_assembly).collect::<Vec<_>>())?
+        } else {
+            let fs = FsFileProvider;
+            let provider = OverlayFileProvider {
+                overlay: &opts.files,
+                base: &fs,
+            };
+            preprocess::preprocess(source, &opts.base_dir, &provider)
+                .map_err(|errs| errs.into_iter().map(pp_error_to_assembly).collect::<Vec<_>>())?
+        }
     } else {
-        let fs = FsFileProvider;
-        let provider = OverlayFileProvider {
-            overlay: &opts.files,
-            base: &fs,
-        };
-        preprocess::preprocess(source, &opts.base_dir, &provider)
-            .map_err(|errs| errs.into_iter().map(pp_error_to_assembly).collect::<Vec<_>>())?
+        let mut sm = crate::sourcemap::SourceMap::new();
+        for (i, _) in source.lines().enumerate() {
+            sm.add_line("<root>", i);
+        }
+        PreprocessResult {
+            source: source.to_string(),
+            source_map: sm,
+        }
     };
 
     // 2. Lex
