@@ -87,4 +87,12 @@ impl SymbolTable {
     pub fn has_label(&self, name: &str) -> bool {
         self.labels.contains_key(name)
     }
+
+    pub fn labels(&self) -> impl Iterator<Item = (&String, &u16)> {
+        self.labels.iter()
+    }
+
+    pub fn constants(&self) -> impl Iterator<Item = (&String, &u16)> {
+        self.constants.iter()
+    }
 }

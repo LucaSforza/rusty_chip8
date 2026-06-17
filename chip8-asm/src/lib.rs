@@ -7,10 +7,10 @@ use crate::parser::{Addr, Imm, Inst, Statement};
 use crate::sourcemap::SourceMap;
 use crate::symbol::SymbolTable;
 
-mod sourcemap;
-mod include;
-mod macroexpand;
-mod preprocess;
+pub mod sourcemap;
+pub mod include;
+pub mod macroexpand;
+pub mod preprocess;
 pub mod lexer;
 pub mod parser;
 pub mod encoder;
@@ -18,8 +18,9 @@ pub mod symbol;
 
 pub use crate::include::{FileProvider, FsFileProvider, OverlayFileProvider};
 pub use crate::preprocess::{PreprocessError, PreprocessResult};
+pub use crate::macroexpand::MacroDef;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssemblyError {
     pub message: String,
     pub file: Option<String>,
@@ -46,7 +47,7 @@ impl std::fmt::Display for AssemblyError {
 }
 
 impl AssemblyError {
-    fn from_string(msg: String) -> Self {
+    pub fn from_string(msg: String) -> Self {
         AssemblyError {
             message: msg,
             file: None,
@@ -68,15 +69,26 @@ pub struct AssembleResult {
     pub listing: Vec<String>,
 }
 
-pub fn assemble(source: &str) -> Result<AssembleResult, Vec<AssemblyError>> {
-    assemble_with(source, &AssemblyOptions::default())
+#[derive(Debug, Clone)]
+pub struct AnalysisResult {
+    pub source: String,
+    pub expanded_source: String,
+    pub source_map: sourcemap::SourceMap,
+    pub tokens: Vec<(lexer::Token, usize, usize)>,
+    pub statements: Vec<Statement>,
+    pub addresses: Vec<u16>,
+    pub symbol_table: symbol::SymbolTable,
+    pub macro_defs: Vec<macroexpand::MacroDef>,
 }
 
-pub fn assemble_with(
+pub fn analyze(source: &str) -> Result<AnalysisResult, Vec<AssemblyError>> {
+    analyze_with(source, &AssemblyOptions::default())
+}
+
+pub fn analyze_with(
     source: &str,
     opts: &AssemblyOptions,
-) -> Result<AssembleResult, Vec<AssemblyError>> {
-    // 1. Preprocessing (skip if no includes or macros)
+) -> Result<AnalysisResult, Vec<AssemblyError>> {
     let has_includes = source.contains("include \"") || source.contains("INCLUDE \"");
     let has_macros = source.contains("\nmacro ") || source.starts_with("macro ");
     let pp = if has_includes || has_macros {
@@ -98,13 +110,12 @@ pub fn assemble_with(
         for (i, _) in source.lines().enumerate() {
             sm.add_line("<root>", i);
         }
-        PreprocessResult {
+        preprocess::PreprocessResult {
             source: source.to_string(),
             source_map: sm,
         }
     };
 
-    // 2. Lex
     let tokens = lexer::tokenize(&pp.source);
     if let Some(errs) = check_lex_errors(&tokens) {
         return Err(errs
@@ -113,7 +124,6 @@ pub fn assemble_with(
             .collect());
     }
 
-    // 3. Parse
     let statements = match parser::parse(&tokens) {
         Ok(s) => s,
         Err(errs) => {
@@ -128,22 +138,39 @@ pub fn assemble_with(
         }
     };
 
-    // 4. Compute layout (was pass1)
     let (sym, addresses) = match compute_layout(&statements) {
         Ok(r) => r,
         Err(e) => return Err(vec![AssemblyError::from_string(e)]),
     };
 
-    // 5. Generate code (was pass2)
-    let (output, listing) = match generate_code(&statements, &addresses, &sym) {
-        Ok(r) => r,
-        Err(e) => return Err(vec![AssemblyError::from_string(e)]),
-    };
+    // Re-parse source to collect macro definitions (before preprocessing strips them)
+    let (_stripped, macro_defs) = macroexpand::collect_definitions(source)
+        .unwrap_or_else(|_| (String::new(), Vec::new()));
 
-    Ok(AssembleResult {
-        bytes: output,
-        listing,
+    Ok(AnalysisResult {
+        source: source.to_string(),
+        expanded_source: pp.source,
+        source_map: pp.source_map,
+        tokens,
+        statements,
+        addresses,
+        symbol_table: sym,
+        macro_defs,
     })
+}
+
+pub fn assemble(source: &str) -> Result<AssembleResult, Vec<AssemblyError>> {
+    assemble_with(source, &AssemblyOptions::default())
+}
+
+pub fn assemble_with(
+    source: &str,
+    opts: &AssemblyOptions,
+) -> Result<AssembleResult, Vec<AssemblyError>> {
+    let analysis = analyze_with(source, opts)?;
+    let (output, listing) = generate_code(&analysis.statements, &analysis.addresses, &analysis.symbol_table)
+        .map_err(|e| vec![AssemblyError::from_string(e)])?;
+    Ok(AssembleResult { bytes: output, listing })
 }
 
 pub fn assemble_file(path: &Path) -> Result<AssembleResult, Vec<AssemblyError>> {
@@ -219,7 +246,7 @@ fn extract_err_pos(e: &parser::ParseError) -> (usize, usize) {
 
 // ── compute_layout (was pass1) ──────────────────────────────────────────
 
-fn compute_layout(
+pub fn compute_layout(
     statements: &[Statement],
 ) -> Result<(SymbolTable, Vec<u16>), String> {
     let mut sym = SymbolTable::new();
@@ -295,7 +322,7 @@ fn compute_layout(
 
 // ── generate_code (was pass2) ───────────────────────────────────────────
 
-fn generate_code(
+pub fn generate_code(
     statements: &[Statement],
     addresses: &[u16],
     sym: &SymbolTable,

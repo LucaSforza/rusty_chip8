@@ -10,5 +10,11 @@
         "CHIP8_DEBUG_PORT": "9876"
       }
     }
+  },
+  "lsp": {
+    "chip8": {
+      "command": ["cargo", "run", "-p", "chip8-lsp"],
+      "extensions": [".asm", ".chip8", ".ch8"]
+    }
   }
 }

@@ -18,4 +18,11 @@ impl SourceMap {
             .map(|(f, l)| (f.as_str(), *l))
             .unwrap_or(("<unknown>", expanded_line))
     }
+
+    pub fn resolve_pos(&self, expanded_line: usize, col: usize) -> (&str, usize, usize) {
+        self.lines
+            .get(expanded_line)
+            .map(|(f, l)| (f.as_str(), *l, col))
+            .unwrap_or(("<unknown>", expanded_line, col))
+    }
 }

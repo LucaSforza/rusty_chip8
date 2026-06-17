@@ -1,0 +1,42 @@
+{
+  "name": "chip8-asm",
+  "displayName": "CHIP-8 Assembler",
+  "description": "CHIP-8 assembly language support",
+  "version": "0.1.0",
+  "publisher": "chip8",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:chip8"],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "chip8",
+        "aliases": ["CHIP-8", "chip8"],
+        "extensions": [".asm", ".chip8", ".ch8"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "chip8",
+        "scopeName": "source.chip8",
+        "path": "./syntaxes/chip8.tmGrammar.json"
+      }
+    ],
+    "semanticTokenColors": {
+      "variable": "#569CD6",
+      "operator": "#DCDCAA",
+      "keyword": "#C586C0",
+      "function": "#DCDCAA",
+      "property": "#9CDCFE",
+      "namespace": "#4EC9B0",
+      "number": "#B5CEA8",
+      "string": "#CE9178",
+      "comment": "#6A9955"
+    }
+  }
+}
