@@ -139,3 +139,79 @@ pub fn get_hover(ws: &Workspace, uri: &Url, pos: Position) -> Option<Hover> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chip8_asm::lexer::tokenize;
+    use chip8_asm::analyze;
+    use crate::workspace::Workspace;
+    use crate::document::Document;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_find_token_works() {
+        let source = "start:\n    CLS\n    LD V0, 10\n";
+        let tokens = tokenize(source);
+
+        // Find CLS at line 1, col 4
+        let result = find_token(&tokens, 1, 4);
+        assert!(result.is_some(), "Should find token at (1,4)");
+        let (tok, line, col) = result.unwrap();
+        assert_eq!(line, 1);
+        assert_eq!(col, 4);
+        match tok {
+            Token::Word(w) => assert_eq!(w, "CLS"),
+            _ => panic!("Expected Word token, got {:?}", tok),
+        }
+
+        // Find start label at (0,0)
+        let result = find_token(&tokens, 0, 0);
+        assert!(result.is_some(), "Should find token at (0,0)");
+        let (tok, line, col) = result.unwrap();
+        assert_eq!(line, 0);
+        assert_eq!(col, 0);
+        match tok {
+            Token::Word(w) => assert_eq!(w, "start"),
+            _ => panic!("Expected Word token, got {:?}", tok),
+        }
+
+        // Find number 10 at (2,11)
+        let result = find_token(&tokens, 2, 11);
+        assert!(result.is_some(), "Should find token at (2,11)");
+    }
+
+    #[test]
+    fn test_get_hover_works() {
+        let source = "start:\n    CLS\n    LD V0, 10\n";
+        let analysis = analyze(source).unwrap();
+        let uri = Url::parse("file:///test.asm").unwrap();
+        let path = PathBuf::from("/test.asm");
+
+        let mut ws = Workspace::new();
+        ws.documents.insert(uri.clone(), Document {
+            path: path.clone(),
+            source: source.to_string(),
+            base_dir: PathBuf::from("/"),
+            statements: Some(analysis.statements.clone()),
+            tokens: Some(analysis.tokens.clone()),
+            symbol_table: Some(analysis.symbol_table.clone()),
+            source_map: Some(analysis.source_map.clone()),
+            addresses: Some(analysis.addresses.clone()),
+            errors: None,
+            analysis: Some(analysis),
+        });
+
+        let result = get_hover(&ws, &uri, Position { line: 1, character: 5 });
+        assert!(result.is_some(), "hover CLS should return Some");
+        if let Some(hover) = result {
+            let has_cls = match &hover.contents {
+                HoverContents::Scalar(MarkedString::String(s)) => {
+                    s.contains("Clear")
+                }
+                _ => false,
+            };
+            assert!(has_cls, "hover should contain 'Clear'");
+        }
+    }
+}

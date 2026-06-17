@@ -43,43 +43,73 @@ impl LspServer {
 
         let Some((_path, source, base_dir)) = doc else { return };
 
-        let result = chip8_asm::analyze_with(
-            &source,
-            &chip8_asm::AssemblyOptions {
-                base_dir,
-                files: HashMap::new(),
-            },
-        );
+        // Do partial analysis: tokenize first, then parse, then compute layout
+        // This way, even with errors we keep the partial state
+        let tokens = chip8_asm::lexer::tokenize(&source);
+
+        let mut errors = Vec::new();
+        let has_lex_errors: Vec<(String, usize, usize)> = tokens.iter()
+            .filter_map(|(t, l, c)| if let chip8_asm::lexer::Token::Error(s) = t {
+                Some((s.clone(), *l, *c))
+            } else { None })
+            .collect();
+
+        for (msg, line, col) in has_lex_errors {
+            errors.push(chip8_asm::AssemblyError::from_string(format!("lex error at {}:{}: {}", line + 1, col + 1, msg)));
+        }
+
+        let (statements, parse_errors) = match chip8_asm::parser::parse(&tokens) {
+            Ok(stmts) => (stmts, Vec::new()),
+            Err(parse_errs) => {
+                let errs: Vec<chip8_asm::AssemblyError> = parse_errs.iter().map(|e| {
+                    let (l, c) = crate::diagnostics::extract_parse_pos(e);
+                    chip8_asm::AssemblyError {
+                        message: e.to_string(),
+                        file: Some("<root>".into()),
+                        line: l,
+                        col: c,
+                    }
+                }).collect();
+                (Vec::new(), errs)
+            }
+        };
+
+        errors.extend(parse_errors);
+
+        let (symbol_table, addresses) = if !statements.is_empty() {
+            chip8_asm::compute_layout(&statements).unwrap_or_default()
+        } else {
+            (Default::default(), Vec::new())
+        };
 
         let mut ws = self.workspace.write().await;
         let doc = ws.documents.get_mut(uri).unwrap();
 
-        match result {
-            Ok(analysis) => {
-                doc.statements = Some(analysis.statements.clone());
-                doc.tokens = Some(analysis.tokens.clone());
-                doc.symbol_table = Some(analysis.symbol_table.clone());
-                doc.source_map = Some(analysis.source_map.clone());
-                doc.addresses = Some(analysis.addresses.clone());
-                doc.errors = None;
-                doc.analysis = Some(analysis);
-            }
-            Err(errs) => {
-                doc.statements = None;
-                doc.tokens = None;
-                doc.symbol_table = None;
-                doc.source_map = None;
-                doc.addresses = None;
-                doc.errors = Some(errs);
-            }
-        }
+        doc.tokens = Some(tokens);
+        doc.statements = Some(statements);
+        doc.symbol_table = Some(symbol_table);
+        doc.addresses = Some(addresses);
 
-        let errors = doc.errors.clone();
+        let empty_errors: Vec<chip8_asm::AssemblyError> = Vec::new();
+        doc.errors = if errors.is_empty() { None } else { Some(errors) };
+        doc.analysis = doc.tokens.as_ref().map(|_| chip8_asm::AnalysisResult {
+            source: source.clone(),
+            expanded_source: source.clone(),
+            source_map: chip8_asm::sourcemap::SourceMap::new(),
+            tokens: doc.tokens.as_ref().unwrap().clone(),
+            statements: doc.statements.as_ref().unwrap_or(&Vec::new()).clone(),
+            addresses: doc.addresses.as_ref().unwrap_or(&Vec::new()).clone(),
+            symbol_table: doc.symbol_table.as_ref().unwrap().clone(),
+            macro_defs: Vec::new(),
+        });
+        doc.source_map = doc.analysis.as_ref().map(|a| a.source_map.clone());
+
+        let publish_errors = doc.errors.clone().unwrap_or(empty_errors);
         let doc_uri = uri.clone();
         let client = self.client.clone();
 
         tokio::spawn(async move {
-            let diags = diagnostics::translate(&errors, &doc_uri);
+            let diags = diagnostics::translate(&Some(publish_errors), &doc_uri);
             client.publish_diagnostics(doc_uri, diags, None).await;
         });
     }
